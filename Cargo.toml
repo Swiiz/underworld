@@ -1,0 +1,16 @@
+[package]
+name = "underworld"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+platform = { path = "crates/platform" }
+graphics = { path = "crates/graphics" }
+cgmath = "0.18.0"
+
+[workspace]
+members = [
+  "crates/*"
+]
