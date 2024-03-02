@@ -15,13 +15,13 @@ fn main() {
 
     let mut sprites = SpriteRegistry::new();
 
-    let character_spritesheet = sprites.register(SpriteSheetData {
+    let characters_spritesheet = sprites.register(SpriteSheetData {
         path: "assets/characters.png".into(),
         sprite_px_size: Vector2 { x: 16, y: 16 },
     });
     let player_sprite = Sprite {
-        sheet: character_spritesheet,
-        position: Vector2::zero(), // At 0*sprite_px_size, 0*sprite_px_size o, the spritesheet
+        sheet: characters_spritesheet,
+        position: Vector2::zero(), // At 0*sprite_px_size, 0*sprite_px_size in the spritesheet
         size: Vector2::from_value(1), // Size of 1*sprite_px_size, 1*sprite_px_size in the spritesheet
     };
 
