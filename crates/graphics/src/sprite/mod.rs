@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, hash::Hash, path::PathBuf};
 
 use cgmath::{Matrix3, Vector2};
 use texture_packer::{
@@ -11,9 +11,15 @@ pub mod renderer;
 
 use crate::{color::Color3, ctx::GraphicsCtx};
 
-pub struct Atlas {
-    pub(super) sheets: Vec<SpriteSheet>,
+pub struct Atlas<K> {
+    pub(super) sheets: HashMap<K, SpriteSheet>,
     bind_group: BindGroup,
+}
+
+pub trait SpriteSheetKey: Clone + Eq + Hash + 'static {
+    fn register_spritesheets(registry: &mut SpriteRegistry<Self>)
+    where
+        Self: Sized;
 }
 
 pub struct SpriteSheetData {
@@ -28,9 +34,6 @@ pub struct SpriteSheet {
     tex_dims: Vector2<f32>,
 }
 
-#[derive(Clone, Copy)]
-pub struct SpriteSheetId(usize);
-
 impl SpriteSheet {
     fn normalize_tex_vec(&self, vec: Vector2<u32>) -> Vector2<f32> {
         let sprite_size_px = self.sprite_size_px.map(|x| x as f32);
@@ -38,9 +41,7 @@ impl SpriteSheet {
         let size_px = self.size_px.map(|x| x as f32);
 
         let pos_px = sprite_size_px.zip(sprite_pos, |a, b| a * b);
-        let r = pos_px.zip(size_px, |a, b| a / b);
-        println!("{r:?}");
-        r
+        pos_px.zip(size_px, |a, b| a / b)
     }
 
     fn tex_coords(&self, sprite_coords: Vector2<u32>) -> Vector2<f32> {
@@ -57,8 +58,8 @@ impl SpriteSheet {
 }
 
 #[derive(Clone, Copy)]
-pub struct Sprite {
-    pub sheet: SpriteSheetId,
+pub struct Sprite<SsK> {
+    pub sheet: SsK,
     pub position: Vector2<u32>,
     pub size: Vector2<u32>,
 }
@@ -70,27 +71,26 @@ pub struct SpriteParams {
     pub depth: f32,
 }
 
-pub struct SpriteRegistry {
-    to_load: Vec<SpriteSheetData>,
+pub struct SpriteRegistry<K> {
+    to_load: HashMap<K, SpriteSheetData>,
 }
 
-impl SpriteRegistry {
+impl<K: SpriteSheetKey> SpriteRegistry<K> {
     pub fn new() -> Self {
         Self {
-            to_load: Vec::new(),
+            to_load: HashMap::new(),
         }
     }
 
-    pub fn register(&mut self, spritesheet_data: SpriteSheetData) -> SpriteSheetId {
-        self.to_load.push(spritesheet_data);
-        SpriteSheetId(self.to_load.len() - 1)
+    pub fn register(&mut self, key: K, spritesheet_data: SpriteSheetData) {
+        self.to_load.insert(key, spritesheet_data);
     }
 
     pub(super) fn build_atlas(
         self,
         ctx: &GraphicsCtx,
         texture_bind_group_layout: &BindGroupLayout,
-    ) -> Atlas {
+    ) -> Atlas<K> {
         let mut packer = TexturePacker::new_skyline(TexturePackerConfig {
             max_width: 4096,
             max_height: 4096,
@@ -100,33 +100,41 @@ impl SpriteRegistry {
             ..Default::default()
         });
 
-        let images = self.to_load.iter().map(|ssd: &SpriteSheetData| {
-            ImageImporter::import_from_file(&ssd.path).expect("Unable to load sprite(sheet)!")
+        let images = self.to_load.iter().map(|(k, ssd)| {
+            (
+                k,
+                ImageImporter::import_from_file(&ssd.path).expect("Unable to load sprite(sheet)!"),
+            )
         });
 
-        images.enumerate().for_each(|(i, img)| {
+        images.for_each(|(k, img)| {
             packer
-                .pack_own(i, img)
+                .pack_own(k, img)
                 .expect("Failed to pack sprite(sheet) into global atlas!")
         });
 
         let sheets = packer
             .get_frames()
             .into_iter()
-            .map(|(i, sheet)| SpriteSheet {
-                size_px: Vector2 {
-                    x: sheet.frame.w,
-                    y: sheet.frame.h,
-                },
-                sprite_size_px: self.to_load[*i].sprite_px_size,
-                tex_coords: Vector2 {
-                    x: sheet.frame.x as f32 / packer.width() as f32,
-                    y: sheet.frame.y as f32 / packer.height() as f32,
-                },
-                tex_dims: Vector2 {
-                    x: sheet.frame.w as f32 / packer.width() as f32,
-                    y: sheet.frame.h as f32 / packer.height() as f32,
-                },
+            .map(|(k, sheet)| {
+                (
+                    (*k).clone(),
+                    SpriteSheet {
+                        size_px: Vector2 {
+                            x: sheet.frame.w,
+                            y: sheet.frame.h,
+                        },
+                        sprite_size_px: self.to_load.get(k).unwrap().sprite_px_size,
+                        tex_coords: Vector2 {
+                            x: sheet.frame.x as f32 / packer.width() as f32,
+                            y: sheet.frame.y as f32 / packer.height() as f32,
+                        },
+                        tex_dims: Vector2 {
+                            x: sheet.frame.w as f32 / packer.width() as f32,
+                            y: sheet.frame.h as f32 / packer.height() as f32,
+                        },
+                    },
+                )
             })
             .collect();
 

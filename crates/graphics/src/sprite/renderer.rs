@@ -10,10 +10,10 @@ use crate::{
 };
 use wgpu::{util::StagingBelt, *};
 
-use super::{Atlas, Sprite, SpriteParams, SpriteRegistry};
+use super::{Atlas, Sprite, SpriteParams, SpriteRegistry, SpriteSheetKey};
 
-impl Renderable for Sprite {
-    type Renderer = SpriteRenderer;
+impl<K: SpriteSheetKey> Renderable for Sprite<K> {
+    type Renderer = SpriteRenderer<K>;
 }
 
 #[repr(C)]
@@ -26,13 +26,13 @@ pub struct SpriteInstance {
     z_index: f32,
 }
 
-impl Draw<Sprite> for SpriteRenderer {
+impl<K: SpriteSheetKey> Draw<Sprite<K>> for SpriteRenderer<K> {
     type Params = SpriteParams;
-    fn draw(&mut self, sprite: Sprite, params: SpriteParams) {
-        let spritesheet = self.atlas.sheets[sprite.sheet.0];
+    fn draw(&mut self, sprite: Sprite<K>, params: SpriteParams) {
+        let spritesheet = self.atlas.sheets[&sprite.sheet];
 
         self.queue.push(SpriteInstance {
-            transform: params.transform.into(),
+            transform: (self.proj_matrix * params.transform).into(),
             tex_pos: spritesheet.tex_coords(sprite.position).into(),
             tex_dims: spritesheet.tex_dims(sprite.size).into(),
             tint: params.tint.into(),
@@ -41,7 +41,7 @@ impl Draw<Sprite> for SpriteRenderer {
     }
 }
 
-pub struct SpriteRenderer {
+pub struct SpriteRenderer<K> {
     pipeline: RenderPipeline,
     depth_texture: Texture,
     depth_texture_view: TextureView,
@@ -51,19 +51,16 @@ pub struct SpriteRenderer {
     sprite_instance_buf: Buffer,
     sprite_staging_belt: StagingBelt,
 
+    proj_matrix: Matrix3<f32>,
+    atlas: Atlas<K>,
     queue: Vec<SpriteInstance>,
-    atlas: Atlas,
 }
 
 const MAX_BATCHES: u64 = 100;
 const MAX_SPRITES_PER_BATCH: u64 = 5_000;
 
-impl SpriteRenderer {
-    pub fn new(
-        ctx: &GraphicsCtx,
-        sprite_registry: SpriteRegistry,
-        window_size: (u32, u32),
-    ) -> Self {
+impl<K: SpriteSheetKey> SpriteRenderer<K> {
+    pub fn new(ctx: &GraphicsCtx, window_size: (u32, u32)) -> Self {
         let (sprite_pipeline, texture_bind_group_layout) =
             create_sprite_pipeline(&ctx.device, ctx.surface_texture_format);
         let (depth_texture, depth_texture_view, depth_texture_sampler) =
@@ -74,7 +71,12 @@ impl SpriteRenderer {
             StagingBelt::new(std::mem::size_of::<SpriteInstance>() as u64 * MAX_SPRITES_PER_BATCH);
 
         let queue = Vec::with_capacity(MAX_SPRITES_PER_BATCH as usize);
+
+        let mut sprite_registry = SpriteRegistry::new();
+        <K as SpriteSheetKey>::register_spritesheets(&mut sprite_registry);
         let atlas = sprite_registry.build_atlas(ctx, &texture_bind_group_layout);
+
+        let proj_matrix = compute_proj_matrix(window_size);
 
         Self {
             pipeline: sprite_pipeline,
@@ -85,14 +87,16 @@ impl SpriteRenderer {
             quad_index_buf,
             sprite_staging_belt,
             sprite_instance_buf,
+            proj_matrix,
             queue,
             atlas,
         }
     }
 }
 
-impl RendererPlugin for SpriteRenderer {
+impl<K: SpriteSheetKey> RendererPlugin for SpriteRenderer<K> {
     fn resize(&mut self, ctx: &GraphicsCtx, window_size: (u32, u32)) {
+        self.proj_matrix = compute_proj_matrix(window_size);
         let (depth_texture, depth_texture_view, depth_texture_sampler) =
             create_depth_texture(&ctx.device, window_size);
         self.depth_texture = depth_texture;
@@ -387,4 +391,10 @@ pub fn create_depth_texture(
     });
 
     (texture, view, sampler)
+}
+
+fn compute_proj_matrix((w, h): (u32, u32)) -> Matrix3<f32> {
+    let (w, h) = (w as f32, h as f32);
+    let (x, y) = if w < h { (1.0, w / h) } else { (h / w, 1.0) };
+    Matrix3::from_nonuniform_scale(x, y)
 }

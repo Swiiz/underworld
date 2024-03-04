@@ -3,10 +3,9 @@ use std::sync::Arc;
 use winit::{
     event::{Event as WinitEvent, WindowEvent},
     event_loop::{EventLoop, EventLoopWindowTarget},
-    window::Window,
 };
 
-pub use winit::window::WindowBuilder;
+pub use winit::window::*;
 
 pub struct Platform {
     event_loop: Option<EventLoop<()>>, // None when running
@@ -32,11 +31,11 @@ impl Platform {
         }
     }
 
-    pub fn run(mut self, mut event_handler: impl FnMut(Event)) {
+    pub fn run<T>(mut self, app: &mut T, mut event_handler: impl FnMut(&mut T, Event)) {
         self.event_loop
             .take()
             .unwrap()
-            .run(|event, elwt| self.handle_event(event, elwt, |event| event_handler(event)))
+            .run(|event, elwt| self.handle_event(event, elwt, |event| event_handler(app, event)))
             .expect("A platform error occured while running window.")
     }
 
