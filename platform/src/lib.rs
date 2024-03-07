@@ -19,14 +19,10 @@ pub enum Event {
 }
 
 impl Platform {
-    pub fn new(window_builder: WindowBuilder) -> Self {
+    pub fn new_with_window() -> Self {
         let event_loop = EventLoop::new().expect("Could not create platform event_loop.");
         Self {
-            window: Arc::new(
-                window_builder
-                    .build(&event_loop)
-                    .expect("Could not create platform window."),
-            ),
+            window: Arc::new(WindowBuilder::new().build(&event_loop).unwrap()),
             event_loop: Some(event_loop),
         }
     }

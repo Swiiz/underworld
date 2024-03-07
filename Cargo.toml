@@ -3,14 +3,17 @@ name = "underworld"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "client"
+path = "client/src/main.rs"
 
 [dependencies]
-platform = { path = "crates/platform" }
-graphics = { path = "crates/graphics" }
-cgmath = "0.18.0"
+platform = { path = "platform" }
+client = { path = "client" }
 
 [workspace]
 members = [
-  "crates/*"
+  "client",
+  "graphics",
+  "platform"
 ]
