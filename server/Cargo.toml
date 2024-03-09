@@ -1,5 +1,5 @@
 [package]
-name = "client"
+name = "server"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,8 +8,4 @@ edition = "2021"
 [dependencies]
 commons = { path = "../commons" }
 
-platform = { path = "../_engine/platform" }
-graphics = { path = "../_engine/graphics" }
-network = { path = "../_engine/network"}
-
-cgmath = "0.18.0"
+network = { path = "../_engine/network" }

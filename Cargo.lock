@@ -285,7 +285,9 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "cgmath",
+ "commons",
  "graphics",
+ "network",
  "platform",
 ]
 
@@ -344,6 +346,13 @@ checksum = "35ed6e9d84f0b51a7f52daf1c7d71dd136fd7a3f41a8462b8cdb8c78d920fad4"
 dependencies = [
  "bytes",
  "memchr",
+]
+
+[[package]]
+name = "commons"
+version = "0.1.0"
+dependencies = [
+ "network",
 ]
 
 [[package]]
@@ -899,6 +908,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "network"
+version = "0.1.0"
+
+[[package]]
 name = "num-traits"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1238,6 +1251,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "commons",
+ "network",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1445,14 +1466,6 @@ name = "ttf-parser"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17f77d76d837a7830fe1d4f12b7b4ba4192c1888001c7164257e4bc6d21d96b4"
-
-[[package]]
-name = "underworld"
-version = "0.1.0"
-dependencies = [
- "client",
- "platform",
-]
 
 [[package]]
 name = "unicode-ident"

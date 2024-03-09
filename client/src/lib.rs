@@ -1,12 +1,14 @@
-use std::sync::Arc;
+use std::{net::TcpStream, sync::Arc};
 
 use assets::SpriteSheets;
 use cgmath::{Array, Matrix3, Vector2, Zero};
+use commons::network::{Protocol, SERVER_PORT};
 use graphics::{
     color::Color3,
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
+use network::client::NetworkClient;
 use platform::{Event, Platform, Window};
 use world::World;
 
@@ -16,6 +18,8 @@ pub mod world;
 pub struct App {
     window: Arc<Window>,
     graphics: Graphics<'static>,
+
+    network: NetworkClient<Protocol>,
     world: World,
 }
 
@@ -33,11 +37,19 @@ impl App {
                 window_size,
             ));
 
+        //TODO: Change remote!
+        let tcp_host_addr = format!("127.0.0.1:{}", SERVER_PORT);
+        let network = NetworkClient::new(
+            TcpStream::connect(&tcp_host_addr).expect("Could not connect to network server!"),
+        );
+        println!("Connection established with remote tcp server: {tcp_host_addr}");
+
         let world = World::generate();
 
         Self {
             window,
             graphics,
+            network,
             world,
         }
     }
@@ -52,7 +64,9 @@ impl App {
         }
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        self.network.update();
+    }
 
     fn render(&mut self) {
         self.graphics.render(|frame| {

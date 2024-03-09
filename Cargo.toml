@@ -1,19 +1,7 @@
-[package]
-name = "underworld"
-version = "0.1.0"
-edition = "2021"
-
-[[bin]]
-name = "client"
-path = "client/src/main.rs"
-
-[dependencies]
-platform = { path = "platform" }
-client = { path = "client" }
-
 [workspace]
 members = [
   "client",
-  "graphics",
-  "platform"
+  "server",
+  "commons",
+  "_engine/*", "commons",
 ]
