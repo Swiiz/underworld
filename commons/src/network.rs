@@ -1,13 +1,14 @@
-use network::commons::NetworkProtocol;
+use network::commons::{ClientSide, NetworkProtocol, Packet};
+use serde::{Deserialize, Serialize};
 
 pub const SERVER_PORT: u16 = 4467;
 
-pub struct Protocol;
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ClientPingPacket;
+impl Packet for ClientPingPacket {
+    type Side = ClientSide;
+}
 
-pub enum ClientPacket {}
-pub enum ServerPacket {}
-
-impl NetworkProtocol for Protocol {
-    type ClientPacket = ClientPacket;
-    type ServerPacket = ServerPacket;
+pub fn protocol() -> NetworkProtocol {
+    NetworkProtocol::new().with_packet::<ClientPingPacket>()
 }

@@ -1,14 +1,17 @@
-use std::{net::TcpStream, sync::Arc};
+use std::{
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream},
+    sync::Arc,
+};
 
 use assets::SpriteSheets;
 use cgmath::{Array, Matrix3, Vector2, Zero};
-use commons::network::{Protocol, SERVER_PORT};
+use commons::network::{protocol, ClientPingPacket, SERVER_PORT};
 use graphics::{
     color::Color3,
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
-use network::client::NetworkClient;
+use network::{commons::ClientSide, Network};
 use platform::{Event, Platform, Window};
 use world::World;
 
@@ -19,9 +22,12 @@ pub struct App {
     window: Arc<Window>,
     graphics: Graphics<'static>,
 
-    network: NetworkClient<Protocol>,
+    network: Network<ClientSide>,
     world: World,
 }
+
+pub const REMOTE: SocketAddr =
+    SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), SERVER_PORT));
 
 impl App {
     pub fn new(platform: &Platform) -> Self {
@@ -37,12 +43,10 @@ impl App {
                 window_size,
             ));
 
-        //TODO: Change remote!
-        let tcp_host_addr = format!("127.0.0.1:{}", SERVER_PORT);
-        let network = NetworkClient::new(
-            TcpStream::connect(&tcp_host_addr).expect("Could not connect to network server!"),
+        let mut network = Network::<ClientSide>::new(protocol());
+        network.set_connection(
+            TcpStream::connect(&REMOTE).expect("Could not connect to remote server!"),
         );
-        println!("Connection established with remote tcp server: {tcp_host_addr}");
 
         let world = World::generate();
 
@@ -66,6 +70,7 @@ impl App {
 
     fn update(&mut self) {
         self.network.update();
+        self.network.emit(ClientPingPacket);
     }
 
     fn render(&mut self) {
