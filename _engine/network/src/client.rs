@@ -1,12 +1,14 @@
 use std::any::TypeId;
 
 use crate::commons::{
-    process_conn, ClientSide, Connection, ConnectionState, NetworkProtocol, Packet, RawPacket,
+    process_conn, ClientSide, Connection, ConnectionState, HandlePacket, NetworkProtocol, Packet,
+    RawPacket, ReceivedPackets,
 };
 
 pub struct NetworkClient {
     connection: Option<Box<dyn Connection<ClientSide>>>,
     protocol: NetworkProtocol,
+    received: ReceivedPackets,
 }
 
 impl NetworkClient {
@@ -14,6 +16,7 @@ impl NetworkClient {
         Self {
             protocol,
             connection: None,
+            received: ReceivedPackets::new(),
         }
     }
 
@@ -37,14 +40,25 @@ impl NetworkClient {
     }
 
     pub fn update(&mut self) {
+        self.received.clear();
         if let Some(conn) = &mut self.connection {
             let (packets, state) = process_conn(conn.as_mut(), &self.protocol);
             for p in packets {
-                println!("Received packet: {}", p.id);
+                self.received.push(p);
             }
             if state == ConnectionState::ShouldClose {
                 self.connection = None;
             }
         }
+    }
+}
+
+impl HandlePacket for NetworkClient {
+    #[allow(private_interfaces)]
+    fn received(&self) -> &ReceivedPackets {
+        &self.received
+    }
+    fn protocol(&self) -> &NetworkProtocol {
+        &self.protocol
     }
 }

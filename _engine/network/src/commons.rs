@@ -1,10 +1,11 @@
 use dyn_clone::DynClone;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     any::{type_name, Any, TypeId},
     collections::HashMap,
     fmt::Display,
     io::{self, ErrorKind, Read, Write},
+    marker::PhantomData,
     mem,
     net::{Shutdown, TcpStream},
 };
@@ -91,7 +92,7 @@ impl RawPacket {
         }
     }
 
-    pub fn decode<'a, T: Packet>(self) -> T {
+    pub fn decode<'a, T: Packet>(&'a self) -> T {
         bincode::deserialize(&self.bytes)
             .unwrap_or_else(|e| panic!("Could not deserialize packet {}, {}", type_name::<T>(), e))
     }
@@ -240,5 +241,54 @@ impl<S: NetworkSide> Connection<S> for TcpStream {
 
     fn close(&mut self) {
         let _ = self.shutdown(Shutdown::Both);
+    }
+}
+
+pub(crate) struct ReceivedPackets {
+    inner: Vec<Box<dyn PacketVec>>,
+}
+
+struct TypedPacketVec<T: Packet> {
+    inner: Vec<T>,
+}
+trait PacketVec {
+    fn push(&mut self, p: RawPacket);
+}
+impl<T: Packet> TypedPacketVec<T> {
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
+        Self { inner: Vec::new() }
+    }
+}
+impl<T: Packet> PacketVec for TypedPacketVec<T> {
+    fn push(&mut self, p: RawPacket) {
+        self.inner.push(p.decode())
+    }
+}
+
+impl ReceivedPackets {
+    pub fn new() -> Self {
+        Self { inner: Vec::new() }
+    }
+
+    pub fn push(&mut self, p: RawPacket) {
+        let minlen = p.id as usize + 1;
+        if self.inner.len() < minlen {
+            self.inner
+                .resize_with(minlen, || Box::new(TypedPacketVec::new()))
+        }
+        self.inner[p.id as usize].push(p);
+    }
+
+    pub fn clear(&mut self) {
+        for v in &mut self.inner {
+            v.clear();
+        }
+    }
+
+    fn with_id(&self, id: PacketId) -> &Vec<RawPacket> {
+        &self.inner[id as usize]
     }
 }

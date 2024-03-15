@@ -1,7 +1,10 @@
 use std::net::TcpListener;
 
-use commons::network::{protocol, SERVER_PORT};
-use network::{commons::ServerSide, Network};
+use commons::network::{protocol, ClientPingPacket, SERVER_PORT};
+use network::{
+    commons::{HandlePacket, ServerSide},
+    Network,
+};
 
 pub struct Server {
     network: Network<ServerSide>,
@@ -19,7 +22,13 @@ impl Server {
         Self { network }
     }
 
+    fn on_ping(&mut self, packet: &ClientPingPacket) {
+        println!("pong!")
+    }
+
     pub fn update(&mut self) {
-        self.network.update();
+        self.network.poll();
+
+        self.network.on(|p| self.on_ping(p));
     }
 }

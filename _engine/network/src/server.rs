@@ -1,10 +1,14 @@
-use crate::commons::{process_conn, Connection, ConnectionState, NetworkProtocol, ServerSide};
+use crate::commons::{
+    process_conn, Connection, ConnectionState, HandlePacket, NetworkProtocol, RawPacket,
+    ReceivedPackets, ServerSide,
+};
 use std::{io::ErrorKind, net::TcpListener};
 
 pub struct NetworkServer {
     providers: Vec<Box<dyn ConnectionProvider>>,
     connections: Vec<Box<dyn Connection<ServerSide>>>,
     protocol: NetworkProtocol,
+    received: ReceivedPackets,
 }
 
 impl NetworkServer {
@@ -13,6 +17,7 @@ impl NetworkServer {
             providers: Vec::new(),
             connections: Vec::new(),
             protocol,
+            received: ReceivedPackets::new(),
         }
     }
 
@@ -21,7 +26,7 @@ impl NetworkServer {
         self.providers.push(Box::new(provider))
     }
 
-    pub fn update(&mut self) {
+    pub fn poll(&mut self) {
         for provider in &self.providers {
             while let Some(mut conn) = provider.poll_conn() {
                 println!(
@@ -33,15 +38,12 @@ impl NetworkServer {
             }
         }
 
+        self.received.clear();
         let mut should_close = Vec::new();
         for (conn_id, conn) in self.connections.iter_mut().enumerate() {
-            let (packet, state) = process_conn(conn.as_mut(), &self.protocol);
-            for p in packet {
-                println!(
-                    "Received packet: {} from connection: {}",
-                    p.id,
-                    conn.remote_addr()
-                );
+            let (packets, state) = process_conn(conn.as_mut(), &self.protocol);
+            for p in packets {
+                self.received.push(p);
             }
             if state == ConnectionState::ShouldClose {
                 should_close.push(conn_id);
@@ -77,5 +79,15 @@ impl ConnectionProvider for TcpListener {
                 None
             }
         }
+    }
+}
+
+impl HandlePacket for NetworkServer {
+    #[allow(private_interfaces)]
+    fn received(&self) -> &ReceivedPackets {
+        &self.received
+    }
+    fn protocol(&self) -> &NetworkProtocol {
+        &self.protocol
     }
 }
