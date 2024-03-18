@@ -1,5 +1,7 @@
 use std::any::TypeId;
 
+use genmap::GenMap;
+
 use crate::{
     connection::{
         process_conn, Connection, ConnectionProvider, ConnectionState, RawPacket, ReceivedPackets,
@@ -8,18 +10,20 @@ use crate::{
     Client, ClientOnly, NetworkSide, Server, ServerOnly,
 };
 
+#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub struct ConnectionHandle<S: NetworkSide>(S::ConnectionHandle);
 pub type DynConnection<S> = Box<dyn Connection<S>>;
 
 pub struct Network<S: NetworkSide> {
     protocol: NetworkProtocol,
-    received: ReceivedPackets,
+    received: ReceivedPackets<S>,
 
     // Client only
-    client_connection: ClientOnly<S, Option<DynConnection<S>>>,
+    client_connection: ClientOnly<S, Option<DynConnection<Client>>>,
 
     // Server only
     server_connection_providers: ServerOnly<S, Vec<Box<dyn ConnectionProvider>>>,
-    server_connections: ServerOnly<S, Vec<DynConnection<S>>>,
+    server_connections: ServerOnly<S, GenMap<DynConnection<Server>>>,
 }
 
 impl<S: NetworkSide> Network<S> {
@@ -31,25 +35,30 @@ impl<S: NetworkSide> Network<S> {
             client_connection: S::client_only(None),
 
             server_connection_providers: S::server_only(Vec::new()),
-            server_connections: S::server_only(Vec::new()),
+            server_connections: S::server_only(GenMap::<DynConnection<Server>>::with_capacity(50)),
         }
     }
 
     /// May lead to performance issue if not used carefully
-    #[track_caller]
-    pub fn on<P: Packet, F: FnMut(&mut Network<S>, P)>(&mut self, mut callback: F) {
+    pub fn on<P: Packet, F: FnMut(&mut Network<S>, P, ConnectionHandle<S>)>(
+        &mut self,
+        mut callback: F,
+    ) {
         assert!(
             TypeId::of::<P::Side>() != TypeId::of::<S>(),
             "Cannot handle packets from own network side!"
         );
         let id = self.protocol.id_of(&TypeId::of::<P>()).unwrap();
-        self.received
-            .bytes_with_id(id)
-            .iter()
+        let Some(r) = self.received.bytes_with_id(id) else {
+            return;
+        };
+        r.iter()
             .cloned()
             .collect::<Vec<_>>()
             .into_iter()
-            .for_each(|bytes| callback(self, RawPacket { id, bytes }.decode::<P>()))
+            .for_each(|(conn_handle, bytes)| {
+                callback(self, RawPacket { id, bytes }.decode::<P>(), conn_handle)
+            })
     }
 }
 impl Network<Client> {
@@ -71,7 +80,7 @@ impl Network<Client> {
         if let Some(conn) = &mut self.client_connection {
             let (packets, state) = process_conn(conn.as_mut(), &self.protocol);
             for p in packets {
-                self.received.push(p);
+                self.received.push(ConnectionHandle(()), p);
             }
             if state == ConnectionState::ShouldClose {
                 self.client_connection = None;
@@ -100,19 +109,26 @@ impl Network<Server> {
                     conn.remote_addr()
                 );
                 conn.configure();
-                self.server_connections.push(conn);
+                self.server_connections.insert(conn);
             }
         }
 
         self.received.clear();
         let mut should_close = Vec::new();
-        for (conn_id, conn) in self.server_connections.iter_mut().enumerate() {
-            let (packets, state) = process_conn(conn.as_mut(), &self.protocol);
+        let handles = self.server_connections.iter().collect::<Vec<_>>();
+        for conn_handle in handles {
+            let (packets, state) = process_conn(
+                self.server_connections
+                    .get_mut(conn_handle)
+                    .unwrap()
+                    .as_mut(),
+                &self.protocol,
+            );
             for p in packets {
-                self.received.push(p);
+                self.received.push(ConnectionHandle(conn_handle), p);
             }
             if state == ConnectionState::ShouldClose {
-                should_close.push(conn_id);
+                should_close.push(conn_handle);
             }
         }
         for id in should_close {
@@ -121,12 +137,36 @@ impl Network<Server> {
     }
 
     pub fn broadcast<T: Packet<Side = Server>>(&mut self, packet: &T) {
-        self.server_connections
-            .iter_mut()
-            .for_each(|c| c.emit(RawPacket::new(packet, &self.protocol), &self.protocol));
+        let handles = self.server_connections.iter().collect::<Vec<_>>();
+        for h in handles {
+            self.server_connections
+                .get_mut(h)
+                .unwrap()
+                .emit(RawPacket::new(packet, &self.protocol), &self.protocol)
+        }
     }
 
-    pub fn send<T: Packet<Side = Server>>(&mut self, packet: &T) {
-        todo!()
+    pub fn send<T: Packet<Side = Server>>(
+        &mut self,
+        packet: &T,
+        conn_handle: ConnectionHandle<Server>,
+    ) {
+        self.server_connections
+            .get_mut(conn_handle.0)
+            .unwrap()
+            .emit(RawPacket::new(packet, &self.protocol), &self.protocol)
+    }
+
+    pub fn send_to_group<T: Packet<Side = Server>>(
+        &mut self,
+        packet: &T,
+        conn_handles: impl Iterator<Item = ConnectionHandle<Server>>,
+    ) {
+        conn_handles.for_each(|ch| {
+            self.server_connections
+                .get_mut(ch.0)
+                .unwrap()
+                .emit(RawPacket::new(packet, &self.protocol), &self.protocol)
+        })
     }
 }

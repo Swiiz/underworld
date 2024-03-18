@@ -5,8 +5,10 @@ use std::{
     rc::Rc,
 };
 
+use genmap::{GenMap, Handle};
+
 use crate::{
-    ctx::DynConnection,
+    ctx::{ConnectionHandle, DynConnection},
     protocol::{NetworkProtocol, Packet, PacketId},
     NetworkSide, Server,
 };
@@ -225,21 +227,21 @@ mod tcp {
     }
 }
 
-pub(crate) struct ReceivedPackets {
-    inner: Vec<Vec<Rc<Vec<u8>>>>,
+pub(crate) struct ReceivedPackets<S: NetworkSide> {
+    inner: Vec<Vec<(ConnectionHandle<S>, Rc<Vec<u8>>)>>,
 }
 
-impl ReceivedPackets {
+impl<S: NetworkSide> ReceivedPackets<S> {
     pub fn new() -> Self {
         Self { inner: Vec::new() }
     }
 
-    pub fn push(&mut self, p: RawPacket) {
+    pub fn push(&mut self, conn_handle: ConnectionHandle<S>, p: RawPacket) {
         let minlen = p.id as usize + 1;
         if self.inner.len() < minlen {
             self.inner.resize_with(minlen, || Vec::new())
         }
-        self.inner[p.id as usize].push(p.bytes);
+        self.inner[p.id as usize].push((conn_handle, p.bytes));
     }
 
     pub fn clear(&mut self) {
@@ -248,7 +250,13 @@ impl ReceivedPackets {
         }
     }
 
-    pub(crate) fn bytes_with_id(&self, id: PacketId) -> &Vec<Rc<Vec<u8>>> {
-        &self.inner[id as usize]
+    pub(crate) fn bytes_with_id(
+        &self,
+        id: PacketId,
+    ) -> Option<&Vec<(ConnectionHandle<S>, Rc<Vec<u8>>)>> {
+        if self.inner.len() <= id as usize {
+            return None;
+        }
+        Some(&self.inner[id as usize])
     }
 }

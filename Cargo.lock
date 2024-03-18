@@ -517,6 +517,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
+name = "genmap"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21fa2ad08db7ccdfaf1ce7c827caa53e1f1f7cdeb1144f877ebd2ef43ed4c0d3"
+
+[[package]]
 name = "gethostname"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -910,6 +916,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "dyn-clone",
+ "genmap",
  "serde",
 ]
 
