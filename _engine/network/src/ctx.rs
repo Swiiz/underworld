@@ -40,9 +40,9 @@ impl<S: NetworkSide> Network<S> {
     }
 
     /// May lead to performance issue if not used carefully
-    pub fn on<P: Packet, F: FnMut(&mut Network<S>, P, ConnectionHandle<S>)>(
+    pub fn on<P: Packet>(
         &mut self,
-        mut callback: F,
+        mut callback: impl FnMut(&mut Network<S>, P, ConnectionHandle<S>),
     ) {
         assert!(
             TypeId::of::<P::Side>() != TypeId::of::<S>(),

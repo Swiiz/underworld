@@ -75,11 +75,10 @@ impl App<Client> {
 
     fn update(&mut self) {
         self.network.poll();
-        self.network
-            .on::<ServerPongPacket, _>(|network, _p, _conn| {
-                println!("Received pong from server!");
-                network.emit(&ClientPingPacket)
-            });
+        self.network.on::<ServerPongPacket>(|network, _p, _conn| {
+            println!("Received pong from server!");
+            network.emit(&ClientPingPacket)
+        });
     }
 
     fn render(&mut self) {
@@ -121,11 +120,10 @@ impl App<Server> {
     pub fn update(&mut self) {
         self.network.poll();
 
-        self.network
-            .on::<ClientPingPacket, _>(|network, _p, _conn| {
-                println!("Received ping from client!");
-                network.broadcast(&ServerPongPacket);
-            });
+        self.network.on::<ClientPingPacket>(|network, _p, _conn| {
+            println!("Received ping from client!");
+            network.broadcast(&ServerPongPacket);
+        });
     }
 }
 
