@@ -11,13 +11,12 @@ use graphics::{
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
-use network::{
-    ctx::{Network, PacketHub},
-    Client, ClientOnly, NetworkSide, Server,
-};
+use network::{ctx::Network, Client, ClientOnly, NetworkSide, Server};
 use platform::{Event, Platform, Window};
-use protocol::{protocol, SERVER_PORT};
+use protocol::{protocol, ClientPingPacket, SERVER_PORT};
 use world::World;
+
+use crate::protocol::ServerPongPacket;
 
 pub mod assets;
 pub mod protocol;
@@ -52,6 +51,7 @@ impl App<Client> {
         network.set_connection(
             TcpStream::connect(&REMOTE).expect("Could not connect to remote server!"),
         );
+        network.emit(&ClientPingPacket);
 
         let world = World::generate();
 
@@ -75,6 +75,10 @@ impl App<Client> {
 
     fn update(&mut self) {
         self.network.poll();
+        self.network.on::<ServerPongPacket, _>(|network, _| {
+            println!("Received pong from server!");
+            network.emit(&ClientPingPacket)
+        });
     }
 
     fn render(&mut self) {
@@ -115,5 +119,14 @@ impl App<Server> {
 
     pub fn update(&mut self) {
         self.network.poll();
+
+        self.network.on::<ClientPingPacket, _>(|network, _| {
+            println!("Received ping from client!");
+            network.broadcast(&ServerPongPacket);
+        });
     }
+}
+
+pub fn enable_backtrace() {
+    std::env::set_var("RUST_BACKTRACE", "1");
 }

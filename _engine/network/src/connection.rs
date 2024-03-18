@@ -2,20 +2,22 @@ use std::{
     any::{type_name, TypeId},
     fmt::Display,
     io::{self, ErrorKind, Read, Write},
+    rc::Rc,
 };
 
 use crate::{
+    ctx::DynConnection,
     protocol::{NetworkProtocol, Packet, PacketId},
     NetworkSide, Server,
 };
 
 pub struct RawPacket {
     pub id: PacketId,
-    pub bytes: Vec<u8>,
+    pub bytes: Rc<Vec<u8>>,
 }
 
 impl RawPacket {
-    pub fn new<T: Packet>(packet: T, protocol: &NetworkProtocol) -> Self {
+    pub fn new<T: Packet>(packet: &T, protocol: &NetworkProtocol) -> Self {
         Self {
             id: protocol
                 .id_of(&TypeId::of::<T>())
@@ -26,9 +28,9 @@ impl RawPacket {
                     )
                 })
                 .unwrap(),
-            bytes: bincode::serialize(&packet).unwrap_or_else(|e| {
+            bytes: Rc::new(bincode::serialize(packet).unwrap_or_else(|e| {
                 panic!("Could not serialize packet {}, {}", type_name::<T>(), e)
-            }),
+            })),
         }
     }
 
@@ -98,7 +100,7 @@ impl std::error::Error for PacketPollError {}
 
 pub trait ConnectionProvider {
     fn configure(&mut self);
-    fn poll_conn(&self) -> Option<Box<dyn Connection<Server>>>;
+    fn poll_conn(&self) -> Option<DynConnection<Server>>;
 }
 
 pub trait Connection<S: NetworkSide>: Read + Write {
@@ -115,7 +117,7 @@ pub trait Connection<S: NetworkSide>: Read + Write {
         if size == 0 {
             return Ok(RawPacket {
                 id,
-                bytes: Vec::new(),
+                bytes: Rc::new(Vec::new()),
             });
         }
 
@@ -126,7 +128,10 @@ pub trait Connection<S: NetworkSide>: Read + Write {
                 if size != r {
                     return Err(PacketPollError::InvalidPacket);
                 }
-                Ok(RawPacket { id, bytes })
+                Ok(RawPacket {
+                    id,
+                    bytes: Rc::new(bytes),
+                })
             },
         )
     }
@@ -175,9 +180,10 @@ mod tcp {
     use std::{
         io::ErrorKind,
         net::{Shutdown, TcpListener, TcpStream},
+        rc::Rc,
     };
 
-    use crate::{NetworkSide, Server};
+    use crate::{ctx::DynConnection, NetworkSide, Server};
 
     use super::{Connection, ConnectionProvider};
 
@@ -203,7 +209,7 @@ mod tcp {
             self.set_nonblocking(true).expect("Cannot set non-blocking");
         }
 
-        fn poll_conn(&self) -> Option<Box<dyn Connection<Server>>> {
+        fn poll_conn(&self) -> Option<DynConnection<Server>> {
             match self.accept() {
                 Ok((conn, _)) => Some(Box::new(conn)),
                 Err(e) => {
@@ -220,7 +226,7 @@ mod tcp {
 }
 
 pub(crate) struct ReceivedPackets {
-    inner: Vec<Vec<Vec<u8>>>,
+    inner: Vec<Vec<Rc<Vec<u8>>>>,
 }
 
 impl ReceivedPackets {
@@ -242,10 +248,7 @@ impl ReceivedPackets {
         }
     }
 
-    pub(crate) fn with_id(&self, id: PacketId) -> impl Iterator<Item = RawPacket> + '_ {
-        self.inner[id as usize]
-            .iter()
-            .cloned()
-            .map(move |bytes| RawPacket { id, bytes })
+    pub(crate) fn bytes_with_id(&self, id: PacketId) -> &Vec<Rc<Vec<u8>>> {
+        &self.inner[id as usize]
     }
 }

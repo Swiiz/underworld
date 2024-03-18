@@ -1,3 +1,5 @@
+use std::any::TypeId;
+
 use crate::{
     connection::{
         process_conn, Connection, ConnectionProvider, ConnectionState, RawPacket, ReceivedPackets,
@@ -17,7 +19,7 @@ pub struct Network<S: NetworkSide> {
 
     // Server only
     server_connection_providers: ServerOnly<S, Vec<Box<dyn ConnectionProvider>>>,
-    server_connections: ServerOnly<S, Vec<Box<dyn Connection<Server>>>>,
+    server_connections: ServerOnly<S, Vec<DynConnection<S>>>,
 }
 
 impl<S: NetworkSide> Network<S> {
@@ -31,6 +33,23 @@ impl<S: NetworkSide> Network<S> {
             server_connection_providers: S::server_only(Vec::new()),
             server_connections: S::server_only(Vec::new()),
         }
+    }
+
+    /// May lead to performance issue if not used carefully
+    #[track_caller]
+    pub fn on<P: Packet, F: FnMut(&mut Network<S>, P)>(&mut self, mut callback: F) {
+        assert!(
+            TypeId::of::<P::Side>() != TypeId::of::<S>(),
+            "Cannot handle packets from own network side!"
+        );
+        let id = self.protocol.id_of(&TypeId::of::<P>()).unwrap();
+        self.received
+            .bytes_with_id(id)
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|bytes| callback(self, RawPacket { id, bytes }.decode::<P>()))
     }
 }
 impl Network<Client> {
@@ -47,26 +66,7 @@ impl Network<Client> {
         self.client_connection.is_some()
     }
 
-    pub fn emit<T: Packet<Side = Client>>(&mut self, packet: T) {
-        self.client_connection
-            .as_mut()
-            .map(|c| c.emit(RawPacket::new(packet, &self.protocol), &self.protocol));
-    }
-}
-
-impl Network<Server> {
-    pub fn add_provider<T: ConnectionProvider + 'static>(&mut self, mut provider: T) {
-        provider.configure();
-        self.server_connection_providers.push(Box::new(provider))
-    }
-}
-
-pub trait PacketHub {
-    fn poll(&mut self);
-}
-
-impl PacketHub for Network<Client> {
-    fn poll(&mut self) {
+    pub fn poll(&mut self) {
         self.received.clear();
         if let Some(conn) = &mut self.client_connection {
             let (packets, state) = process_conn(conn.as_mut(), &self.protocol);
@@ -78,10 +78,21 @@ impl PacketHub for Network<Client> {
             }
         }
     }
+
+    pub fn emit<T: Packet<Side = Client>>(&mut self, packet: &T) {
+        self.client_connection
+            .as_mut()
+            .map(|c| c.emit(RawPacket::new(packet, &self.protocol), &self.protocol));
+    }
 }
 
-impl PacketHub for Network<Server> {
-    fn poll(&mut self) {
+impl Network<Server> {
+    pub fn add_provider<T: ConnectionProvider + 'static>(&mut self, mut provider: T) {
+        provider.configure();
+        self.server_connection_providers.push(Box::new(provider))
+    }
+
+    pub fn poll(&mut self) {
         for provider in &self.server_connection_providers {
             while let Some(mut conn) = provider.poll_conn() {
                 println!(
@@ -107,5 +118,15 @@ impl PacketHub for Network<Server> {
         for id in should_close {
             self.server_connections.remove(id);
         }
+    }
+
+    pub fn broadcast<T: Packet<Side = Server>>(&mut self, packet: &T) {
+        self.server_connections
+            .iter_mut()
+            .for_each(|c| c.emit(RawPacket::new(packet, &self.protocol), &self.protocol));
+    }
+
+    pub fn send<T: Packet<Side = Server>>(&mut self, packet: &T) {
+        todo!()
     }
 }

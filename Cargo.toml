@@ -2,8 +2,20 @@
 name = "underworld"
 version = "0.1.0"
 edition = "2021"
+default-run = "full"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "full"
+path = "src/bin/full.rs"
+
+[[bin]]
+name = "client"
+path = "src/bin/client.rs"
+
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+
 
 [dependencies]
 platform = { path = "_engine/platform" }

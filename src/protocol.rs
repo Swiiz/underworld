@@ -1,6 +1,6 @@
 use network::{
     protocol::{NetworkProtocol, Packet},
-    Client,
+    Client, Server,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,14 @@ impl Packet for ClientPingPacket {
     type Side = Client;
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ServerPongPacket;
+impl Packet for ServerPongPacket {
+    type Side = Server;
+}
+
 pub fn protocol() -> NetworkProtocol {
-    NetworkProtocol::new().with_packet::<ClientPingPacket>()
+    NetworkProtocol::new()
+        .with_packet::<ClientPingPacket>()
+        .with_packet::<ServerPongPacket>()
 }

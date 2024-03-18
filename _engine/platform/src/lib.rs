@@ -12,6 +12,7 @@ pub struct Platform {
     pub window: Arc<Window>,           // No need to support multiple windows
 }
 
+#[derive(PartialEq)]
 pub enum Event {
     Update,
     Render,
