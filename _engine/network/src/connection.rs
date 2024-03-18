@@ -1,73 +1,13 @@
-use dyn_clone::DynClone;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
-    any::{type_name, Any, TypeId},
-    collections::HashMap,
+    any::{type_name, TypeId},
     fmt::Display,
     io::{self, ErrorKind, Read, Write},
-    marker::PhantomData,
-    mem,
-    net::{Shutdown, TcpStream},
 };
 
-pub trait NetworkSide: 'static {
-    type Context;
-    type OppositeSide;
-}
-pub struct ClientSide;
-pub struct ServerSide;
-impl NetworkSide for ClientSide {
-    type Context = crate::client::NetworkClient;
-    type OppositeSide = ServerSide;
-}
-impl NetworkSide for ServerSide {
-    type Context = crate::server::NetworkServer;
-    type OppositeSide = ClientSide;
-}
-
-type PacketId = u16;
-
-pub trait Packet: Serialize + DeserializeOwned + DynClone + Any {
-    type Side: NetworkSide;
-}
-
-pub struct NetworkProtocol {
-    packets: HashMap<TypeId, PacketId>,
-    packet_sizes: Vec<usize>,
-}
-
-impl NetworkProtocol {
-    pub fn new() -> Self {
-        Self {
-            packet_sizes: Vec::new(),
-            packets: HashMap::new(),
-        }
-    }
-
-    pub fn with_packet<P: Packet>(mut self) -> Self {
-        let tid = TypeId::of::<P>();
-        assert!(
-            !self.packets.contains_key(&tid),
-            "Cannot register the same packet twice!"
-        );
-        let id = self
-            .packets
-            .len()
-            .try_into()
-            .expect("Could not create packet id from packet type id!");
-        self.packets.insert(tid, id);
-        self.packet_sizes.push(std::mem::size_of::<P>());
-        self
-    }
-
-    fn id_of(&self, type_id: &TypeId) -> Option<PacketId> {
-        self.packets.get(type_id).copied()
-    }
-
-    fn size_of(&self, id: PacketId) -> Option<usize> {
-        self.packet_sizes.get(id as usize).copied()
-    }
-}
+use crate::{
+    protocol::{NetworkProtocol, Packet, PacketId},
+    NetworkSide, Server,
+};
 
 pub struct RawPacket {
     pub id: PacketId,
@@ -156,6 +96,11 @@ impl Display for PacketPollError {
 }
 impl std::error::Error for PacketPollError {}
 
+pub trait ConnectionProvider {
+    fn configure(&mut self);
+    fn poll_conn(&self) -> Option<Box<dyn Connection<Server>>>;
+}
+
 pub trait Connection<S: NetworkSide>: Read + Write {
     fn configure(&mut self);
     fn remote_addr(&self) -> String;
@@ -226,46 +171,56 @@ pub(crate) fn process_conn<S: NetworkSide>(
     (packets, state)
 }
 
-// TCP
-impl<S: NetworkSide> Connection<S> for TcpStream {
-    fn configure(&mut self) {
-        self.set_nonblocking(true)
-            .expect("Could not configure tcp stream to be non blocking!");
+mod tcp {
+    use std::{
+        io::ErrorKind,
+        net::{Shutdown, TcpListener, TcpStream},
+    };
+
+    use crate::{NetworkSide, Server};
+
+    use super::{Connection, ConnectionProvider};
+
+    impl<S: NetworkSide> Connection<S> for TcpStream {
+        fn configure(&mut self) {
+            self.set_nonblocking(true)
+                .expect("Could not configure tcp stream to be non blocking!");
+        }
+
+        fn remote_addr(&self) -> String {
+            self.peer_addr()
+                .expect("Could not resolve tcp connection remote address!")
+                .to_string()
+        }
+
+        fn close(&mut self) {
+            let _ = self.shutdown(Shutdown::Both);
+        }
     }
 
-    fn remote_addr(&self) -> String {
-        self.peer_addr()
-            .expect("Could not resolve tcp connection remote address!")
-            .to_string()
-    }
+    impl ConnectionProvider for TcpListener {
+        fn configure(&mut self) {
+            self.set_nonblocking(true).expect("Cannot set non-blocking");
+        }
 
-    fn close(&mut self) {
-        let _ = self.shutdown(Shutdown::Both);
+        fn poll_conn(&self) -> Option<Box<dyn Connection<Server>>> {
+            match self.accept() {
+                Ok((conn, _)) => Some(Box::new(conn)),
+                Err(e) => {
+                    if e.kind() != ErrorKind::WouldBlock {
+                        println!(
+                            "WARNING: Error occured while polling connections from tcp server: {e}"
+                        )
+                    }
+                    None
+                }
+            }
+        }
     }
 }
 
 pub(crate) struct ReceivedPackets {
-    inner: Vec<Box<dyn PacketVec>>,
-}
-
-struct TypedPacketVec<T: Packet> {
-    inner: Vec<T>,
-}
-trait PacketVec {
-    fn push(&mut self, p: RawPacket);
-}
-impl<T: Packet> TypedPacketVec<T> {
-    fn new() -> Self
-    where
-        Self: Sized,
-    {
-        Self { inner: Vec::new() }
-    }
-}
-impl<T: Packet> PacketVec for TypedPacketVec<T> {
-    fn push(&mut self, p: RawPacket) {
-        self.inner.push(p.decode())
-    }
+    inner: Vec<Vec<Vec<u8>>>,
 }
 
 impl ReceivedPackets {
@@ -276,10 +231,9 @@ impl ReceivedPackets {
     pub fn push(&mut self, p: RawPacket) {
         let minlen = p.id as usize + 1;
         if self.inner.len() < minlen {
-            self.inner
-                .resize_with(minlen, || Box::new(TypedPacketVec::new()))
+            self.inner.resize_with(minlen, || Vec::new())
         }
-        self.inner[p.id as usize].push(p);
+        self.inner[p.id as usize].push(p.bytes);
     }
 
     pub fn clear(&mut self) {
@@ -288,7 +242,10 @@ impl ReceivedPackets {
         }
     }
 
-    fn with_id(&self, id: PacketId) -> &Vec<RawPacket> {
-        &self.inner[id as usize]
+    pub(crate) fn with_id(&self, id: PacketId) -> impl Iterator<Item = RawPacket> + '_ {
+        self.inner[id as usize]
+            .iter()
+            .cloned()
+            .map(move |bytes| RawPacket { id, bytes })
     }
 }

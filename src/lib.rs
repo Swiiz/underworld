@@ -1,35 +1,40 @@
 use std::{
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream},
+    marker::PhantomData,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream},
     sync::Arc,
 };
 
 use assets::SpriteSheets;
 use cgmath::{Array, Matrix3, Vector2, Zero};
-use commons::network::{protocol, ClientPingPacket, SERVER_PORT};
 use graphics::{
     color::Color3,
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
-use network::{commons::ClientSide, Network};
+use network::{
+    ctx::{Network, PacketHub},
+    Client, ClientOnly, NetworkSide, Server,
+};
 use platform::{Event, Platform, Window};
+use protocol::{protocol, SERVER_PORT};
 use world::World;
 
 pub mod assets;
+pub mod protocol;
 pub mod world;
 
-pub struct App {
-    window: Arc<Window>,
-    graphics: Graphics<'static>,
+pub struct App<S: NetworkSide> {
+    window: ClientOnly<S, Arc<Window>>,
+    graphics: ClientOnly<S, Graphics<'static>>,
 
-    network: Network<ClientSide>,
+    network: Network<S>,
     world: World,
 }
 
 pub const REMOTE: SocketAddr =
     SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), SERVER_PORT));
 
-impl App {
+impl App<Client> {
     pub fn new(platform: &Platform) -> Self {
         let window = platform.window.clone();
         let window_size = window.inner_size().into();
@@ -43,7 +48,7 @@ impl App {
                 window_size,
             ));
 
-        let mut network = Network::<ClientSide>::new(protocol());
+        let mut network = Network::<Client>::new(protocol());
         network.set_connection(
             TcpStream::connect(&REMOTE).expect("Could not connect to remote server!"),
         );
@@ -69,8 +74,7 @@ impl App {
     }
 
     fn update(&mut self) {
-        self.network.update();
-        self.network.emit(ClientPingPacket);
+        self.network.poll();
     }
 
     fn render(&mut self) {
@@ -88,5 +92,28 @@ impl App {
                 },
             );
         });
+    }
+}
+
+impl App<Server> {
+    pub fn new() -> Self {
+        let mut network = Network::<Server>::new(protocol());
+        let tcp_host_addr = format!("127.0.0.1:{}", SERVER_PORT);
+        network
+            .add_provider(TcpListener::bind(&tcp_host_addr).expect("Could not create tcp server!"));
+        println!("Listening for tcp connections on: {tcp_host_addr}");
+
+        let world = World::generate();
+
+        Self {
+            window: PhantomData,
+            graphics: PhantomData,
+            network,
+            world,
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.network.poll();
     }
 }
