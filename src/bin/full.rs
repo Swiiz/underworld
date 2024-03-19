@@ -3,7 +3,7 @@ use platform::{Event, Platform};
 use underworld::{enable_backtrace, App};
 
 fn main() {
-    enable_backtrace();
+    //enable_backtrace();
     let platform = Platform::new_with_window();
     let mut server = App::<Server>::new();
     let mut client = App::<Client>::new(&platform);

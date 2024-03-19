@@ -16,7 +16,7 @@ use platform::{Event, Platform, Window};
 use protocol::{protocol, ClientPingPacket, SERVER_PORT};
 use world::World;
 
-use crate::protocol::ServerPongPacket;
+use crate::{protocol::ServerPongPacket, world::ClientLoadWorldPacket};
 
 pub mod assets;
 pub mod protocol;
@@ -27,7 +27,7 @@ pub struct App<S: NetworkSide> {
     graphics: ClientOnly<S, Graphics<'static>>,
 
     network: Network<S>,
-    world: World,
+    world: World<S>,
 }
 
 pub const REMOTE: SocketAddr =
@@ -53,7 +53,7 @@ impl App<Client> {
         );
         network.emit(&ClientPingPacket);
 
-        let world = World::generate();
+        let world = World::<Client>::new();
 
         Self {
             window,
@@ -75,14 +75,18 @@ impl App<Client> {
 
     fn update(&mut self) {
         self.network.poll();
-        self.network.on::<ServerPongPacket>(|network, _p, _conn| {
-            println!("Received pong from server!");
-            network.emit(&ClientPingPacket)
+        self.network.on::<ServerPongPacket>(|network, _, _| {
+            println!("INFO: Client successfully connected to server! Loading world...");
+            network.emit(&ClientLoadWorldPacket);
         });
+
+        self.world.client_update(&mut self.network);
     }
 
     fn render(&mut self) {
         self.graphics.render(|frame| {
+            self.world.render(frame);
+
             frame.draw(
                 Sprite {
                     sheet: SpriteSheets::Characters,
@@ -90,7 +94,8 @@ impl App<Client> {
                     size: Vector2::from_value(1),
                 },
                 SpriteParams {
-                    transform: Matrix3::from_translation(Vector2::from_value(-0.5)), // At -0.5, -0.5
+                    transform: Matrix3::from_scale(0.1)
+                        * Matrix3::from_translation(Vector2::from_value(-0.5)), // At -0.5, -0.5
                     tint: Color3::WHITE,
                     depth: 0.0,
                 },
@@ -105,9 +110,10 @@ impl App<Server> {
         let tcp_host_addr = format!("127.0.0.1:{}", SERVER_PORT);
         network
             .add_provider(TcpListener::bind(&tcp_host_addr).expect("Could not create tcp server!"));
-        println!("Listening for tcp connections on: {tcp_host_addr}");
+        println!("INFO: Listening for tcp connections on: {tcp_host_addr}");
 
-        let world = World::generate();
+        let mut world = World::<Server>::new();
+        world.server_generate();
 
         Self {
             window: PhantomData,
@@ -124,9 +130,12 @@ impl App<Server> {
             println!("Received ping from client!");
             network.broadcast(&ServerPongPacket);
         });
+
+        self.world.server_update(&mut self.network);
     }
 }
 
+#[allow(unused)]
 pub fn enable_backtrace() {
     std::env::set_var("RUST_BACKTRACE", "1");
 }

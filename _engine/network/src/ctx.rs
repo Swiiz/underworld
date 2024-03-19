@@ -1,10 +1,11 @@
-use std::any::TypeId;
+use std::{any::TypeId, rc::Rc};
 
 use genmap::GenMap;
 
 use crate::{
     connection::{
-        process_conn, Connection, ConnectionProvider, ConnectionState, RawPacket, ReceivedPackets,
+        process_conn, Connection, ConnectionProvider, ConnectionState, IntoRawPackets, RawPacket,
+        ReceivedPackets,
     },
     protocol::{NetworkProtocol, Packet},
     Client, ClientOnly, NetworkSide, Server, ServerOnly,
@@ -15,7 +16,7 @@ pub struct ConnectionHandle<S: NetworkSide>(S::ConnectionHandle);
 pub type DynConnection<S> = Box<dyn Connection<S>>;
 
 pub struct Network<S: NetworkSide> {
-    protocol: NetworkProtocol,
+    protocol: Rc<NetworkProtocol>,
     received: ReceivedPackets<S>,
 
     // Client only
@@ -29,7 +30,7 @@ pub struct Network<S: NetworkSide> {
 impl<S: NetworkSide> Network<S> {
     pub fn new(protocol: NetworkProtocol) -> Self {
         Self {
-            protocol,
+            protocol: Rc::new(protocol),
             received: ReceivedPackets::new(),
 
             client_connection: S::client_only(None),
@@ -48,7 +49,7 @@ impl<S: NetworkSide> Network<S> {
             TypeId::of::<P::Side>() != TypeId::of::<S>(),
             "Cannot handle packets from own network side!"
         );
-        let id = self.protocol.id_of(&TypeId::of::<P>()).unwrap();
+        let id = self.protocol.id_of(&TypeId::of::<P>()).expect("Tried to handle packet that isn't in the protocol! Don't forget to add it to your NetworkProtocol!");
         let Some(r) = self.received.bytes_with_id(id) else {
             return;
         };
@@ -88,10 +89,12 @@ impl Network<Client> {
         }
     }
 
-    pub fn emit<T: Packet<Side = Client>>(&mut self, packet: &T) {
-        self.client_connection
-            .as_mut()
-            .map(|c| c.emit(RawPacket::new(packet, &self.protocol), &self.protocol));
+    pub fn emit<T: IntoRawPackets<Client>>(&mut self, packets: T) {
+        self.client_connection.as_mut().map(|c| {
+            for p in packets.into_raw_packets(&self.protocol) {
+                c.emit(p, &self.protocol)
+            }
+        });
     }
 }
 
@@ -136,37 +139,45 @@ impl Network<Server> {
         }
     }
 
-    pub fn broadcast<T: Packet<Side = Server>>(&mut self, packet: &T) {
+    pub fn broadcast<T: IntoRawPackets<Server>>(&mut self, packets: T) {
         let handles = self.server_connections.iter().collect::<Vec<_>>();
+        let raw_packets = packets.into_raw_packets(&self.protocol);
         for h in handles {
-            self.server_connections
-                .get_mut(h)
-                .unwrap()
-                .emit(RawPacket::new(packet, &self.protocol), &self.protocol)
+            for p in raw_packets.clone() {
+                self.server_connections
+                    .get_mut(h)
+                    .unwrap()
+                    .emit(p, &self.protocol)
+            }
         }
     }
 
-    pub fn send<T: Packet<Side = Server>>(
+    pub fn send<T: IntoRawPackets<Server>>(
         &mut self,
-        packet: &T,
+        packets: T,
         conn_handle: ConnectionHandle<Server>,
     ) {
-        self.server_connections
-            .get_mut(conn_handle.0)
-            .unwrap()
-            .emit(RawPacket::new(packet, &self.protocol), &self.protocol)
+        for p in packets.into_raw_packets(&self.protocol) {
+            self.server_connections
+                .get_mut(conn_handle.0)
+                .unwrap()
+                .emit(p, &self.protocol)
+        }
     }
 
-    pub fn send_to_group<T: Packet<Side = Server>>(
+    pub fn send_to_group<T: IntoRawPackets<Server>>(
         &mut self,
-        packet: &T,
-        conn_handles: impl Iterator<Item = ConnectionHandle<Server>>,
+        packets: T,
+        conn_handles: Vec<ConnectionHandle<Server>>,
     ) {
-        conn_handles.for_each(|ch| {
-            self.server_connections
-                .get_mut(ch.0)
-                .unwrap()
-                .emit(RawPacket::new(packet, &self.protocol), &self.protocol)
-        })
+        let raw_packets = packets.into_raw_packets(&self.protocol);
+        for p in raw_packets {
+            conn_handles.iter().for_each(|ch| {
+                self.server_connections
+                    .get_mut(ch.0)
+                    .unwrap()
+                    .emit(p.clone(), &self.protocol)
+            })
+        }
     }
 }

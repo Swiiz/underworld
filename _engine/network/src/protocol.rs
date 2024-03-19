@@ -3,14 +3,13 @@ use std::{
     collections::HashMap,
 };
 
-use dyn_clone::DynClone;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::NetworkSide;
 
 pub(crate) type PacketId = u16;
 
-pub trait Packet: Serialize + DeserializeOwned + DynClone + Any {
+pub trait Packet: Serialize + DeserializeOwned + Default + Any {
     type Side: NetworkSide;
 }
 
@@ -39,7 +38,10 @@ impl NetworkProtocol {
             .try_into()
             .expect("Could not create packet id from packet type id!");
         self.packets.insert(tid, id);
-        self.packet_sizes.push(std::mem::size_of::<P>());
+        self.packet_sizes.push(
+            bincode::serialized_size(&P::default())
+                .expect("Failed to compute serialized size of packet!") as usize,
+        );
         self
     }
 

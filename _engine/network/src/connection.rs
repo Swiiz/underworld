@@ -2,10 +2,9 @@ use std::{
     any::{type_name, TypeId},
     fmt::Display,
     io::{self, ErrorKind, Read, Write},
+    marker::PhantomData,
     rc::Rc,
 };
-
-use genmap::{GenMap, Handle};
 
 use crate::{
     ctx::{ConnectionHandle, DynConnection},
@@ -13,6 +12,43 @@ use crate::{
     NetworkSide, Server,
 };
 
+pub struct PacketQueue<S: NetworkSide> {
+    packets: Vec<RawPacket>,
+    protocol: NetworkProtocol,
+    _marker: PhantomData<S>,
+}
+
+impl<S: NetworkSide> PacketQueue<S> {
+    pub fn new(protocol: NetworkProtocol) -> Self {
+        Self {
+            packets: Vec::new(),
+            protocol,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn push<T: Packet<Side = S>>(&mut self, packet: &T) {
+        self.packets.push(RawPacket::new(packet, &self.protocol));
+    }
+}
+
+pub trait IntoRawPackets<S: NetworkSide> {
+    fn into_raw_packets(self, protocol: &NetworkProtocol) -> Vec<RawPacket>;
+}
+
+impl<S: NetworkSide, T: Packet<Side = S>> IntoRawPackets<S> for &T {
+    fn into_raw_packets(self, protocol: &NetworkProtocol) -> Vec<RawPacket> {
+        vec![RawPacket::new(self, protocol)]
+    }
+}
+
+impl<S: NetworkSide> IntoRawPackets<S> for &mut PacketQueue<S> {
+    fn into_raw_packets(self, _: &NetworkProtocol) -> Vec<RawPacket> {
+        std::mem::replace(&mut self.packets, Vec::new())
+    }
+}
+
+#[derive(Clone)]
 pub struct RawPacket {
     pub id: PacketId,
     pub bytes: Rc<Vec<u8>>,

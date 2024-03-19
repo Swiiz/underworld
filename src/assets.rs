@@ -1,10 +1,23 @@
-use cgmath::Vector2;
-use graphics::sprite::{SpriteRegistry, SpriteSheetData, SpriteSheetKey};
+use cgmath::{Array, Vector2};
+use graphics::sprite::{Sprite, SpriteRegistry, SpriteSheetData, SpriteSheetKey};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum SpriteSheets {
     Characters,
+    System,
 }
+
+pub const DEBUG_SPRITE: Sprite<SpriteSheets> = Sprite {
+    sheet: SpriteSheets::System,
+    position: Vector2::new(0, 0),
+    size: Vector2::new(1, 1),
+};
+
+pub const VOID_SPRITE: Sprite<SpriteSheets> = Sprite {
+    sheet: SpriteSheets::System,
+    position: Vector2::new(1, 0),
+    size: Vector2::new(1, 1),
+};
 
 impl SpriteSheetKey for SpriteSheets {
     fn register_spritesheets(registry: &mut SpriteRegistry<Self>)
@@ -15,6 +28,13 @@ impl SpriteSheetKey for SpriteSheets {
             Self::Characters,
             SpriteSheetData {
                 path: "assets/characters.png".into(),
+                sprite_px_size: Vector2 { x: 16, y: 16 },
+            },
+        );
+        registry.register(
+            Self::System,
+            SpriteSheetData {
+                path: "assets/system.png".into(),
                 sprite_px_size: Vector2 { x: 16, y: 16 },
             },
         );

@@ -21,9 +21,11 @@ path = "src/bin/server.rs"
 platform = { path = "_engine/platform" }
 graphics = { path = "_engine/graphics" }
 network = { path = "_engine/network"}
-
-cgmath = "0.18.0"
+cgmath = { version = "0.18.0", features = ["serde"] }
 serde = { version = "1.0.197", features = ["derive"] }
+rand_pcg = "0.3.1"
+rand_core = { version = "0.6.4", features = ["getrandom"] }
+rand = "0.8.5"
 
 [workspace]
 resolver = "2"
