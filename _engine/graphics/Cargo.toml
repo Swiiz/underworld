@@ -13,4 +13,5 @@ cgmath = "0.18.0"
 texture_packer = { version = "0.27.0", default-features = false, features = [
     "png",
 ]}
-bytemuck = {version = "1.14.3", features = ["derive"]}
+bytemuck = { version = "1.14.3", features = ["derive"] }
+platform = { path = "../platform" }

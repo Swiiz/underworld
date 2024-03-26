@@ -1,0 +1,1 @@
+print("Vanilla mod loaded from " .. networkside)

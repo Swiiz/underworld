@@ -1,11 +1,11 @@
 use std::{any::TypeId, rc::Rc};
 
 use genmap::GenMap;
+use platform::info;
 
 use crate::{
     connection::{
-        process_conn, Connection, ConnectionProvider, ConnectionState, IntoRawPackets, RawPacket,
-        ReceivedPackets,
+        process_conn, Connection, ConnectionProvider, ConnectionState, RawPacket, ReceivedPackets,
     },
     protocol::{NetworkProtocol, Packet},
     Client, ClientOnly, NetworkSide, Server, ServerOnly,
@@ -58,7 +58,16 @@ impl<S: NetworkSide> Network<S> {
             .collect::<Vec<_>>()
             .into_iter()
             .for_each(|(conn_handle, bytes)| {
-                callback(self, RawPacket { id, bytes }.decode::<P>(), conn_handle)
+                callback(
+                    self,
+                    RawPacket {
+                        id,
+                        size: bytes.len() as u16,
+                        bytes,
+                    }
+                    .decode::<P>(),
+                    conn_handle,
+                )
             })
     }
 }
@@ -66,8 +75,8 @@ impl Network<Client> {
     pub fn set_connection(&mut self, mut conn: impl Connection<Client> + 'static) {
         conn.configure();
         self.client_connection = Some(Box::new(conn));
-        println!(
-            "INFO: client_connection established with remote: {}",
+        info!(
+            "client_connection established with remote: {}",
             self.client_connection.as_ref().unwrap().remote_addr()
         );
     }
@@ -89,10 +98,18 @@ impl Network<Client> {
         }
     }
 
-    pub fn emit<T: IntoRawPackets<Client>>(&mut self, packets: T) {
+    pub fn send<T: Packet<Side = Client>>(&mut self, packets: &[T]) {
+        let packets = packets
+            .iter()
+            .map(|p| RawPacket::new(p, &self.protocol))
+            .collect();
+        self.send_raw(packets);
+    }
+
+    pub(crate) fn send_raw(&mut self, packets: Vec<RawPacket>) {
         self.client_connection.as_mut().map(|c| {
-            for p in packets.into_raw_packets(&self.protocol) {
-                c.emit(p, &self.protocol)
+            for p in packets {
+                c.emit(p)
             }
         });
     }
@@ -107,8 +124,8 @@ impl Network<Server> {
     pub fn poll(&mut self) {
         for provider in &self.server_connection_providers {
             while let Some(mut conn) = provider.poll_conn() {
-                println!(
-                    "INFO: Network server opened connection with: {}",
+                info!(
+                    "Network server opened connection with: {}",
                     conn.remote_addr()
                 );
                 conn.configure();
@@ -139,45 +156,37 @@ impl Network<Server> {
         }
     }
 
-    pub fn broadcast<T: IntoRawPackets<Server>>(&mut self, packets: T) {
-        let handles = self.server_connections.iter().collect::<Vec<_>>();
-        let raw_packets = packets.into_raw_packets(&self.protocol);
-        for h in handles {
-            for p in raw_packets.clone() {
-                self.server_connections
-                    .get_mut(h)
-                    .unwrap()
-                    .emit(p, &self.protocol)
-            }
-        }
+    pub fn all_connections(&self) -> Vec<ConnectionHandle<Server>> {
+        self.server_connections
+            .iter()
+            .map(ConnectionHandle::<Server>)
+            .collect::<Vec<_>>()
     }
 
-    pub fn send<T: IntoRawPackets<Server>>(
+    pub fn send<T: Packet<Side = Server>>(
         &mut self,
-        packets: T,
-        conn_handle: ConnectionHandle<Server>,
+        packets: &[T],
+        conn_handles: &[ConnectionHandle<Server>],
     ) {
-        for p in packets.into_raw_packets(&self.protocol) {
-            self.server_connections
-                .get_mut(conn_handle.0)
-                .unwrap()
-                .emit(p, &self.protocol)
-        }
+        let packets = packets
+            .iter()
+            .map(|p| RawPacket::new(p, &self.protocol))
+            .collect();
+        self.send_raw(packets, conn_handles);
     }
 
-    pub fn send_to_group<T: IntoRawPackets<Server>>(
+    pub(crate) fn send_raw(
         &mut self,
-        packets: T,
-        conn_handles: Vec<ConnectionHandle<Server>>,
+        packets: Vec<RawPacket>,
+        conn_handles: &[ConnectionHandle<Server>],
     ) {
-        let raw_packets = packets.into_raw_packets(&self.protocol);
-        for p in raw_packets {
-            conn_handles.iter().for_each(|ch| {
+        conn_handles.iter().for_each(|ch| {
+            for p in packets.clone() {
                 self.server_connections
                     .get_mut(ch.0)
                     .unwrap()
-                    .emit(p.clone(), &self.protocol)
-            })
-        }
+                    .emit(p.clone())
+            }
+        })
     }
 }

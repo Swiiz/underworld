@@ -9,19 +9,17 @@ use crate::NetworkSide;
 
 pub(crate) type PacketId = u16;
 
-pub trait Packet: Serialize + DeserializeOwned + Default + Any {
+pub trait Packet: Serialize + DeserializeOwned + Any {
     type Side: NetworkSide;
 }
 
 pub struct NetworkProtocol {
     packets: HashMap<TypeId, PacketId>,
-    packet_sizes: Vec<usize>,
 }
 
 impl NetworkProtocol {
     pub fn new() -> Self {
         Self {
-            packet_sizes: Vec::new(),
             packets: HashMap::new(),
         }
     }
@@ -38,18 +36,10 @@ impl NetworkProtocol {
             .try_into()
             .expect("Could not create packet id from packet type id!");
         self.packets.insert(tid, id);
-        self.packet_sizes.push(
-            bincode::serialized_size(&P::default())
-                .expect("Failed to compute serialized size of packet!") as usize,
-        );
         self
     }
 
     pub(crate) fn id_of(&self, type_id: &TypeId) -> Option<PacketId> {
         self.packets.get(type_id).copied()
-    }
-
-    pub(crate) fn size_of(&self, id: PacketId) -> Option<usize> {
-        self.packet_sizes.get(id as usize).copied()
     }
 }

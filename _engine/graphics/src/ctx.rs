@@ -1,3 +1,4 @@
+use platform::warn;
 use wgpu::*;
 
 use crate::renderer::{Draw, Renderable, Renderer};
@@ -90,7 +91,7 @@ impl<'w> GraphicsCtx<'w> {
         });
 
         if surface_texture.is_err() {
-            println!("WARNING: {}", surface_texture.err().unwrap());
+            warn!("{}", surface_texture.err().unwrap());
             return None;
         }
         let surface_texture = surface_texture.unwrap();

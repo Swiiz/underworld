@@ -1,5 +1,5 @@
-use cgmath::{Array, Vector2};
-use graphics::{ctx::Frame, Graphics};
+use cgmath::Vector2;
+use graphics::ctx::Frame;
 use network::{
     connection::PacketQueue, ctx::Network, protocol::Packet, Client, NetworkSide, Server,
     ServerOnly,
@@ -10,10 +10,12 @@ use crate::protocol::protocol;
 
 use self::{
     generator::{Generate, WorldGenerator},
+    player::Player,
     terrain::{Chunk, Terrain, TileId},
 };
 
 mod generator;
+mod player;
 mod terrain;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -29,13 +31,6 @@ pub struct ServerWorldSendChunkPacket {
 impl Packet for ServerWorldSendChunkPacket {
     type Side = Server;
 }
-impl Default for ServerWorldSendChunkPacket {
-    fn default() -> Self {
-        Self {
-            chunk: Chunk::new(Vector2::from_value(i32::MAX)),
-        }
-    }
-}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ServerWorldSetTilePacket {
     chunk_coords: Vector2<i32>,
@@ -45,55 +40,50 @@ pub struct ServerWorldSetTilePacket {
 impl Packet for ServerWorldSetTilePacket {
     type Side = Server;
 }
-impl Default for ServerWorldSetTilePacket {
-    fn default() -> Self {
-        Self {
-            chunk_coords: Vector2::new(0, 0),
-            tile_coords: Vector2::new(0, 0),
-            new_tile_id: 0,
-        }
-    }
-}
 
 pub struct World<S: NetworkSide> {
     terrain: Terrain<S>,
+    players: Vec<Player>,
 
     server_generator: ServerOnly<S, WorldGenerator>,
-    server_changes_queue: ServerOnly<S, PacketQueue<Server>>,
+    changes_queue: PacketQueue<S>,
 }
 
 impl<S: NetworkSide> World<S> {
     pub fn new() -> Self {
         let server_generator = S::server_only(WorldGenerator::new(None));
-        let server_changes_queue = S::server_only(PacketQueue::new(protocol()));
+
+        let changes_queue = PacketQueue::new(protocol());
 
         let terrain = Terrain::new();
+        let players = Vec::new();
 
         Self {
             terrain,
+            players,
             server_generator,
-            server_changes_queue,
+            changes_queue,
         }
     }
 }
 
 impl World<Server> {
     pub fn server_generate(&mut self) {
-        self.terrain
-            .generate(&mut self.server_generator, &mut self.server_changes_queue);
+        self.terrain.generate(&mut self.server_generator);
     }
 
     pub fn server_update(&mut self, network: &mut Network<Server>) {
         network.on::<ClientLoadWorldPacket>(|network, _, conn| {
             self.terrain.send(network, conn);
         });
-        network.broadcast(&mut self.server_changes_queue);
+        self.changes_queue.submit(network);
     }
 }
 
 impl World<Client> {
     pub fn client_update(&mut self, network: &mut Network<Client>) {
-        self.terrain.client_update(network)
+        self.terrain.client_update(network);
+        self.changes_queue.submit(network);
     }
 
     pub fn render(&self, frame: &mut Frame) {

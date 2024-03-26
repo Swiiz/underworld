@@ -1,4 +1,3 @@
-use network::{connection::PacketQueue, Server};
 use rand_core::SeedableRng;
 use rand_pcg::Pcg32;
 
@@ -21,5 +20,5 @@ impl WorldGenerator {
 }
 
 pub trait Generate {
-    fn generate(&mut self, generator: &mut WorldGenerator, changes_queue: &mut PacketQueue<Server>);
+    fn generate(&mut self, generator: &mut WorldGenerator);
 }

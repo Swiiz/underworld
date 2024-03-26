@@ -1,10 +1,11 @@
-use network::Client;
-use platform::Platform;
-use underworld::{enable_backtrace, App};
+use network::{Client, NetworkSide};
+use platform::window::WindowPlatform;
+use underworld::App;
 
 fn main() {
     //enable_backtrace();
-    let platform = Platform::new_with_window();
+    Client::set_log_side();
+    let platform = WindowPlatform::new();
     let mut app = App::<Client>::new(&platform);
     platform.run(&mut app, App::handle_event);
 }

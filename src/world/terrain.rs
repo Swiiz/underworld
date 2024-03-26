@@ -1,20 +1,19 @@
 use std::collections::HashMap;
 
-use cgmath::{Array, ElementWise, Matrix3, Transform, Vector2};
+use cgmath::{Array, Matrix3, Vector2};
 use graphics::{
     color::Color3,
     ctx::Frame,
     sprite::{Sprite, SpriteParams},
 };
 use network::{
-    connection::PacketQueue,
     ctx::{ConnectionHandle, Network},
     Client, ClientOnly, NetworkSide, Server,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::assets::{SpriteSheets, DEBUG_SPRITE, VOID_SPRITE};
+use crate::assets::SpriteSheets;
 
 use super::{
     generator::{Generate, WorldGenerator},
@@ -44,14 +43,10 @@ impl<S: NetworkSide> Terrain<S> {
 }
 
 impl Generate for Terrain<Server> {
-    fn generate(
-        &mut self,
-        generator: &mut WorldGenerator,
-        changes_queue: &mut PacketQueue<Server>,
-    ) {
+    fn generate(&mut self, generator: &mut WorldGenerator) {
         for cc in self.chunks_in_sight() {
             let mut chunk = Chunk::new(cc);
-            chunk.generate(generator, changes_queue);
+            chunk.generate(generator);
             self.chunks.insert(cc, chunk);
         }
     }
@@ -60,7 +55,7 @@ impl Generate for Terrain<Server> {
 impl Terrain<Server> {
     pub fn send(&self, network: &mut Network<Server>, conn: ConnectionHandle<Server>) {
         for chunk in self.chunks.values().cloned() {
-            network.send(&ServerWorldSendChunkPacket { chunk }, conn);
+            network.send(&[ServerWorldSendChunkPacket { chunk }], &[conn]);
         }
     }
 }
@@ -103,7 +98,7 @@ impl Chunk {
     pub fn new(coords: Vector2<i32>) -> Self {
         Self {
             coords,
-            tiles: [[VOID_TILE_ID; CHUNK_SIZE]; CHUNK_SIZE],
+            tiles: [[DIRT_TILE_ID; CHUNK_SIZE]; CHUNK_SIZE],
         }
     }
 
@@ -131,23 +126,17 @@ impl Chunk {
 }
 
 impl Generate for Chunk {
-    fn generate(
-        &mut self,
-        generator: &mut WorldGenerator,
-        changes_queue: &mut PacketQueue<Server>,
-    ) {
+    fn generate(&mut self, generator: &mut WorldGenerator) {
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
-                if generator.rng.gen::<bool>() {
+                if generator.rng.gen::<f32>() > 0.90 {
+                    self.tiles[x][y] = GOLD_ORE_TILE_ID;
+                } else if generator.rng.gen::<f32>() > 0.95 {
+                    self.tiles[x][y] = DIAMOND_ORE_TILE_ID;
+                }
+
+                if x % CHUNK_SIZE == 0 && y % CHUNK_SIZE == 0 {
                     self.tiles[x][y] = DEBUG_TILE_ID;
-                    changes_queue.push(&ServerWorldSetTilePacket {
-                        chunk_coords: self.coords,
-                        tile_coords: Vector2 {
-                            x: x as i32,
-                            y: y as i32,
-                        },
-                        new_tile_id: DEBUG_TILE_ID,
-                    })
                 }
             }
         }
@@ -161,7 +150,12 @@ pub struct TileRegistry<S: NetworkSide> {
 impl<S: NetworkSide> TileRegistry<S> {
     pub fn new() -> Self {
         Self {
-            entries: vec![void_tile(), debug_tile()],
+            entries: vec![
+                debug_tile(),
+                dirt_tile(),
+                diamond_ore_tile(),
+                gold_ore_tile(),
+            ],
         }
     }
 }
@@ -170,15 +164,45 @@ pub struct Tile<S: NetworkSide> {
     client_sprite: ClientOnly<S, Sprite<SpriteSheets>>,
 }
 
-const VOID_TILE_ID: TileId = 0;
-fn void_tile<S: NetworkSide>() -> Tile<S> {
-    Tile {
-        client_sprite: S::client_only(VOID_SPRITE),
-    }
-}
-const DEBUG_TILE_ID: TileId = 1;
+const DEBUG_TILE_ID: TileId = 0;
 fn debug_tile<S: NetworkSide>() -> Tile<S> {
     Tile {
-        client_sprite: S::client_only(DEBUG_SPRITE),
+        client_sprite: S::client_only(Sprite {
+            sheet: SpriteSheets::System,
+            position: Vector2::new(0, 0),
+            size: Vector2::new(1, 1),
+        }),
+    }
+}
+
+const DIRT_TILE_ID: TileId = 1;
+fn dirt_tile<S: NetworkSide>() -> Tile<S> {
+    Tile {
+        client_sprite: S::client_only(Sprite {
+            sheet: SpriteSheets::BasicTiles,
+            position: Vector2::new(7, 1),
+            size: Vector2::new(1, 1),
+        }),
+    }
+}
+const DIAMOND_ORE_TILE_ID: TileId = 2;
+fn diamond_ore_tile<S: NetworkSide>() -> Tile<S> {
+    Tile {
+        client_sprite: S::client_only(Sprite {
+            sheet: SpriteSheets::BasicTiles,
+            position: Vector2::new(6, 1),
+            size: Vector2::new(1, 1),
+        }),
+    }
+}
+
+const GOLD_ORE_TILE_ID: TileId = 3;
+fn gold_ore_tile<S: NetworkSide>() -> Tile<S> {
+    Tile {
+        client_sprite: S::client_only(Sprite {
+            sheet: SpriteSheets::BasicTiles,
+            position: Vector2::new(6, 2),
+            size: Vector2::new(1, 1),
+        }),
     }
 }

@@ -1,69 +1,66 @@
-use std::sync::Arc;
+use std::sync::RwLock;
 
-use winit::{
-    event::{Event as WinitEvent, WindowEvent},
-    event_loop::{EventLoop, EventLoopWindowTarget},
-};
+use colored::{Color, Colorize};
+use log::{Level, LevelFilter, Log};
 
-pub use winit::window::*;
+pub mod headless;
+pub mod window;
 
-pub struct Platform {
-    event_loop: Option<EventLoop<()>>, // None when running
-    pub window: Arc<Window>,           // No need to support multiple windows
+pub use colored;
+pub use log::{debug, error, info, trace, warn};
+static LOGGER: Logger = Logger;
+static LOGGER_SIDE: RwLock<(String, Color)> = RwLock::new((String::new(), Color::White));
+
+pub const IGNORE_LIST: &'static [&'static str] = &["wgpu"];
+
+pub(crate) fn init_logger() {
+    log::set_logger(&LOGGER)
+        .map(|()| log::set_max_level(LevelFilter::Info))
+        .expect("Could not set logger!")
 }
 
-#[derive(PartialEq)]
-pub enum Event {
-    Update,
-    Render,
-    Resize,
+pub fn set_log_side(name: String, color: Color) {
+    *LOGGER_SIDE.write().expect("Could not change log side!") = (name, color);
+}
+pub(crate) fn get_log_side_prefix() -> String {
+    let logger_side = LOGGER_SIDE.read().expect("Could not read logger side!");
+    let mut r = String::new();
+    if logger_side.0.len() > 0 {
+        r = format!("[{}]", logger_side.0.color(logger_side.1));
+    }
+    r
 }
 
-impl Platform {
-    pub fn new_with_window() -> Self {
-        let event_loop = EventLoop::new().expect("Could not create platform event_loop.");
-        Self {
-            window: Arc::new(WindowBuilder::new().build(&event_loop).unwrap()),
-            event_loop: Some(event_loop),
+pub struct Logger;
+
+impl Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= Level::Trace
+    }
+
+    fn log(&self, record: &log::Record) {
+        let md = record.metadata();
+        if self.enabled(md) {
+            if let Some(path) = record.module_path() {
+                for e in IGNORE_LIST {
+                    if path.contains(e) {
+                        return;
+                    }
+                }
+            }
+
+            let level = record.level().to_string();
+            let level = match record.level() {
+                Level::Trace => level.magenta(),
+                Level::Debug => level.bright_green(),
+                Level::Info => level.bright_blue(),
+                Level::Warn => level.yellow(),
+                Level::Error => level.red(),
+            };
+
+            println!("{} {} - {}", get_log_side_prefix(), level, record.args());
         }
     }
 
-    pub fn run<T>(mut self, app: &mut T, mut event_handler: impl FnMut(&mut T, Event)) {
-        self.event_loop
-            .take()
-            .unwrap()
-            .run(|event, elwt| self.handle_event(event, elwt, |event| event_handler(app, event)))
-            .expect("A platform error occured while running window.")
-    }
-
-    fn handle_event(
-        &self,
-        event: WinitEvent<()>,
-        elwt: &EventLoopWindowTarget<()>,
-        mut emit: impl FnMut(Event),
-    ) {
-        match event {
-            WinitEvent::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                elwt.exit();
-            }
-            WinitEvent::AboutToWait => {
-                emit(Event::Update);
-
-                self.window.request_redraw();
-            }
-            WinitEvent::WindowEvent { event, .. } => match event {
-                WindowEvent::RedrawRequested => {
-                    emit(Event::Render);
-                }
-                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                    emit(Event::Resize)
-                }
-                _ => (),
-            },
-            _ => (),
-        }
-    }
+    fn flush(&self) {}
 }

@@ -11,14 +11,19 @@ use graphics::{
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
+use mods::ModLoader;
 use network::{ctx::Network, Client, ClientOnly, NetworkSide, Server};
-use platform::{Event, Platform, Window};
+use platform::{
+    debug, info,
+    window::{Window, WindowPlatform, WindowPlatformEvent},
+};
 use protocol::{protocol, ClientPingPacket, SERVER_PORT};
 use world::World;
 
 use crate::{protocol::ServerPongPacket, world::ClientLoadWorldPacket};
 
 pub mod assets;
+mod mods;
 pub mod protocol;
 pub mod world;
 
@@ -27,6 +32,8 @@ pub struct App<S: NetworkSide> {
     graphics: ClientOnly<S, Graphics<'static>>,
 
     network: Network<S>,
+    mods: ModLoader<S>,
+
     world: World<S>,
 }
 
@@ -34,7 +41,7 @@ pub const REMOTE: SocketAddr =
     SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), SERVER_PORT));
 
 impl App<Client> {
-    pub fn new(platform: &Platform) -> Self {
+    pub fn new(platform: &WindowPlatform) -> Self {
         let window = platform.window.clone();
         let window_size = window.inner_size().into();
 
@@ -51,7 +58,9 @@ impl App<Client> {
         network.set_connection(
             TcpStream::connect(&REMOTE).expect("Could not connect to remote server!"),
         );
-        network.emit(&ClientPingPacket);
+        network.send(&[ClientPingPacket]);
+
+        let mods = ModLoader::load();
 
         let world = World::<Client>::new();
 
@@ -59,15 +68,16 @@ impl App<Client> {
             window,
             graphics,
             network,
+            mods,
             world,
         }
     }
 
-    pub fn handle_event(&mut self, event: Event) {
+    pub fn handle_event(&mut self, event: WindowPlatformEvent) {
         match event {
-            Event::Update => self.update(),
-            Event::Render => self.render(),
-            Event::Resize => {
+            WindowPlatformEvent::Update => self.update(),
+            WindowPlatformEvent::Render => self.render(),
+            WindowPlatformEvent::Resize => {
                 self.graphics.resize(self.window.inner_size().into());
             }
         }
@@ -76,8 +86,8 @@ impl App<Client> {
     fn update(&mut self) {
         self.network.poll();
         self.network.on::<ServerPongPacket>(|network, _, _| {
-            println!("INFO: Client successfully connected to server! Loading world...");
-            network.emit(&ClientLoadWorldPacket);
+            info!("Client successfully connected to server! Loading world...");
+            network.send(&[ClientLoadWorldPacket]);
         });
 
         self.world.client_update(&mut self.network);
@@ -110,7 +120,9 @@ impl App<Server> {
         let tcp_host_addr = format!("127.0.0.1:{}", SERVER_PORT);
         network
             .add_provider(TcpListener::bind(&tcp_host_addr).expect("Could not create tcp server!"));
-        println!("INFO: Listening for tcp connections on: {tcp_host_addr}");
+        info!("Listening for tcp connections on: {tcp_host_addr}");
+
+        let mods = ModLoader::load();
 
         let mut world = World::<Server>::new();
         world.server_generate();
@@ -119,6 +131,7 @@ impl App<Server> {
             window: PhantomData,
             graphics: PhantomData,
             network,
+            mods,
             world,
         }
     }
@@ -127,8 +140,8 @@ impl App<Server> {
         self.network.poll();
 
         self.network.on::<ClientPingPacket>(|network, _p, _conn| {
-            println!("Received ping from client!");
-            network.broadcast(&ServerPongPacket);
+            debug!("Received ping from client!");
+            network.send(&[ServerPongPacket], &network.all_connections())
         });
 
         self.world.server_update(&mut self.network);

@@ -1,10 +1,11 @@
-use cgmath::{Array, Vector2};
+use cgmath::Vector2;
 use graphics::sprite::{Sprite, SpriteRegistry, SpriteSheetData, SpriteSheetKey};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum SpriteSheets {
     Characters,
     System,
+    BasicTiles,
 }
 
 pub const DEBUG_SPRITE: Sprite<SpriteSheets> = Sprite {
@@ -27,14 +28,21 @@ impl SpriteSheetKey for SpriteSheets {
         registry.register(
             Self::Characters,
             SpriteSheetData {
-                path: "assets/characters.png".into(),
+                path: "mods/vanilla/assets/characters.png".into(),
                 sprite_px_size: Vector2 { x: 16, y: 16 },
             },
         );
         registry.register(
             Self::System,
             SpriteSheetData {
-                path: "assets/system.png".into(),
+                path: "mods/vanilla/assets/system.png".into(),
+                sprite_px_size: Vector2 { x: 16, y: 16 },
+            },
+        );
+        registry.register(
+            Self::BasicTiles,
+            SpriteSheetData {
+                path: "mods/vanilla/assets/basictiles.png".into(),
                 sprite_px_size: Vector2 { x: 16, y: 16 },
             },
         );
