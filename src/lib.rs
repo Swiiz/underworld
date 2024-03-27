@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::mods::loader::ModLoader;
 use assets::SpriteSheets;
 use cgmath::{Array, Matrix3, Vector2, Zero};
 use graphics::{
@@ -11,7 +12,6 @@ use graphics::{
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
-use mods::ModLoader;
 use network::{ctx::Network, Client, ClientOnly, NetworkSide, Server};
 use platform::{
     debug, info,
@@ -62,18 +62,15 @@ impl App<Client> {
 
         let mods = ModLoader::new();
 
-        let world = World::<Client>::new();
+        let world = World::<Client>::new(&mods.api);
 
-        let mut _self = Self {
+        Self {
             window,
             graphics,
             network,
             mods,
             world,
-        };
-
-        ModLoader::init(&mut _self);
-        _self
+        }
     }
 
     pub fn handle_event(&mut self, event: WindowPlatformEvent) {
@@ -127,7 +124,7 @@ impl App<Server> {
 
         let mods = ModLoader::new();
 
-        let mut world = World::<Server>::new();
+        let mut world = World::<Server>::new(&mods.api);
         world.server_generate();
 
         Self {

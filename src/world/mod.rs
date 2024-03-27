@@ -6,7 +6,7 @@ use network::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::protocol;
+use crate::{mods::api::ModsApi, protocol::protocol};
 
 use self::{
     generator::{Generate, WorldGenerator},
@@ -50,12 +50,12 @@ pub struct World<S: NetworkSide> {
 }
 
 impl<S: NetworkSide> World<S> {
-    pub fn new() -> Self {
+    pub fn new(api: &ModsApi<S>) -> Self {
         let server_generator = S::server_only(WorldGenerator::new(None));
 
         let changes_queue = PacketQueue::new(protocol());
 
-        let terrain = Terrain::new();
+        let terrain = Terrain::new(api);
         let players = Vec::new();
 
         Self {

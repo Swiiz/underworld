@@ -1,4 +1,4 @@
-use network::{NetworkSide, Server};
+use network::{BaseNetworkSide, NetworkSide, Server};
 
 use underworld::App;
 

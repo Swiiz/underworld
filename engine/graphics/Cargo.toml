@@ -6,13 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+platform = { path = "../platform" }
 downcast-rs = "1.2.0"
 pollster = "0.3.0"
 wgpu = "0.19.1"
-cgmath = { version = "0.18.0", features = ["serde"]}
 texture_packer = { version = "0.27.0", default-features = false, features = [
     "png",
 ]}
-bytemuck = { version = "1.14.3", features = ["derive"] }
-platform = { path = "../platform" }
+cgmath = { version = "0.18.0", features = ["serde"]}
 serde = { version = "1.0.197", features = ["derive"] }
+bytemuck = { version = "1.14.3", features = ["derive"] }

@@ -8,13 +8,13 @@ use graphics::{
 };
 use network::{
     ctx::{ConnectionHandle, Network},
-    Client, ClientOnly, ClientOnlySerde, NetworkSide, Server,
+    BaseNetworkSide, Client, ClientOnly, ClientOnlySerde, NetworkSide, Server,
 };
 use platform::{debug, info};
 use rand::Rng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::assets::SpriteSheets;
+use crate::{assets::SpriteSheets, mods::api::ModsApi};
 
 use super::{
     generator::{Generate, WorldGenerator},
@@ -27,9 +27,9 @@ pub struct Terrain<S: NetworkSide> {
 }
 
 impl<S: NetworkSide> Terrain<S> {
-    pub fn new() -> Self {
+    pub fn new(api: &ModsApi<S>) -> Self {
         Self {
-            tile_registry: TileRegistry::new(),
+            tile_registry: TileRegistry::new(api),
             chunks: HashMap::new(),
         }
     }
@@ -149,9 +149,9 @@ pub struct TileRegistry<S: NetworkSide> {
 }
 
 impl<S: NetworkSide> TileRegistry<S> {
-    pub fn new() -> Self {
+    pub fn new(api: &ModsApi<S>) -> Self {
         Self {
-            entries: Vec::new(),
+            entries: api.tile_registry().collect(),
         }
     }
 
@@ -161,7 +161,7 @@ impl<S: NetworkSide> TileRegistry<S> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Tile<S: NetworkSide> {
+pub struct Tile<S: BaseNetworkSide> {
     id: String,
     client_sprite: ClientOnlySerde<S, Sprite<SpriteSheets>>,
 }

@@ -1,4 +1,4 @@
-use network::{Client, NetworkSide};
+use network::{BaseNetworkSide, Client, NetworkSide};
 use platform::window::WindowPlatform;
 use underworld::App;
 

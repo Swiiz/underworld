@@ -1,4 +1,4 @@
-use network::{Client, NetworkSide, Server};
+use network::{BaseNetworkSide, Client, NetworkSide, Server};
 use platform::{
     colored::Color,
     set_log_side,
