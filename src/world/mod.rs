@@ -14,9 +14,9 @@ use self::{
     terrain::{Chunk, Terrain, TileId},
 };
 
-mod generator;
-mod player;
-mod terrain;
+pub mod generator;
+pub mod player;
+pub mod terrain;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct ClientLoadWorldPacket;
@@ -42,7 +42,7 @@ impl Packet for ServerWorldSetTilePacket {
 }
 
 pub struct World<S: NetworkSide> {
-    terrain: Terrain<S>,
+    pub terrain: Terrain<S>,
     players: Vec<Player>,
 
     server_generator: ServerOnly<S, WorldGenerator>,

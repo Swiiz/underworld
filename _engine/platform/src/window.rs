@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::info;
 use winit::{
     event::{Event as WinitEvent, WindowEvent},
     event_loop::{EventLoop, EventLoopWindowTarget},
@@ -25,8 +26,11 @@ impl WindowPlatform {
     pub fn new() -> Self {
         init_logger();
         let event_loop = EventLoop::new().expect("Could not create platform event_loop.");
+        let window = Arc::new(WindowBuilder::new().build(&event_loop).unwrap());
+        info!("Platfrom window context created.");
+
         Self {
-            window: Arc::new(WindowBuilder::new().build(&event_loop).unwrap()),
+            window,
             event_loop: Some(event_loop),
         }
     }

@@ -60,17 +60,20 @@ impl App<Client> {
         );
         network.send(&[ClientPingPacket]);
 
-        let mods = ModLoader::load();
+        let mods = ModLoader::new();
 
         let world = World::<Client>::new();
 
-        Self {
+        let mut _self = Self {
             window,
             graphics,
             network,
             mods,
             world,
-        }
+        };
+
+        ModLoader::init(&mut _self);
+        _self
     }
 
     pub fn handle_event(&mut self, event: WindowPlatformEvent) {
@@ -122,7 +125,7 @@ impl App<Server> {
             .add_provider(TcpListener::bind(&tcp_host_addr).expect("Could not create tcp server!"));
         info!("Listening for tcp connections on: {tcp_host_addr}");
 
-        let mods = ModLoader::load();
+        let mods = ModLoader::new();
 
         let mut world = World::<Server>::new();
         world.server_generate();

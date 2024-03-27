@@ -1,0 +1,9 @@
+{
+  "rust-analyzer.linkedProjects": [
+    ".\\Cargo.toml"
+  ],
+  "Lua.diagnostics.globals": [
+    "networkside",
+    "Game"
+  ]
+}

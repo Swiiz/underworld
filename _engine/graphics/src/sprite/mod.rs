@@ -1,6 +1,7 @@
 use std::{collections::HashMap, hash::Hash, path::PathBuf};
 
 use cgmath::{Matrix3, Vector2};
+use serde::{Deserialize, Serialize};
 use texture_packer::{
     exporter::ImageExporter, importer::ImageImporter, texture::Texture as _, TexturePacker,
     TexturePackerConfig,
@@ -57,7 +58,7 @@ impl SpriteSheet {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Sprite<SsK> {
     pub sheet: SsK,
     pub position: Vector2<u32>,

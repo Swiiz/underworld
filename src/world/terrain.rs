@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData, rc::Rc};
 
 use cgmath::{Array, Matrix3, Vector2};
 use graphics::{
@@ -8,10 +8,11 @@ use graphics::{
 };
 use network::{
     ctx::{ConnectionHandle, Network},
-    Client, ClientOnly, NetworkSide, Server,
+    Client, ClientOnly, ClientOnlySerde, NetworkSide, Server,
 };
+use platform::{debug, info};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::assets::SpriteSheets;
 
@@ -21,7 +22,7 @@ use super::{
 };
 
 pub struct Terrain<S: NetworkSide> {
-    tile_registry: TileRegistry<S>,
+    pub tile_registry: TileRegistry<S>,
     chunks: HashMap<Vector2<i32>, Chunk>,
 }
 
@@ -150,59 +151,22 @@ pub struct TileRegistry<S: NetworkSide> {
 impl<S: NetworkSide> TileRegistry<S> {
     pub fn new() -> Self {
         Self {
-            entries: vec![
-                debug_tile(),
-                dirt_tile(),
-                diamond_ore_tile(),
-                gold_ore_tile(),
-            ],
+            entries: Vec::new(),
         }
+    }
+
+    pub fn add(&mut self, tile: Tile<S>) {
+        self.entries.push(tile)
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Tile<S: NetworkSide> {
-    client_sprite: ClientOnly<S, Sprite<SpriteSheets>>,
+    id: String,
+    client_sprite: ClientOnlySerde<S, Sprite<SpriteSheets>>,
 }
 
 const DEBUG_TILE_ID: TileId = 0;
-fn debug_tile<S: NetworkSide>() -> Tile<S> {
-    Tile {
-        client_sprite: S::client_only(Sprite {
-            sheet: SpriteSheets::System,
-            position: Vector2::new(0, 0),
-            size: Vector2::new(1, 1),
-        }),
-    }
-}
-
 const DIRT_TILE_ID: TileId = 1;
-fn dirt_tile<S: NetworkSide>() -> Tile<S> {
-    Tile {
-        client_sprite: S::client_only(Sprite {
-            sheet: SpriteSheets::BasicTiles,
-            position: Vector2::new(7, 1),
-            size: Vector2::new(1, 1),
-        }),
-    }
-}
 const DIAMOND_ORE_TILE_ID: TileId = 2;
-fn diamond_ore_tile<S: NetworkSide>() -> Tile<S> {
-    Tile {
-        client_sprite: S::client_only(Sprite {
-            sheet: SpriteSheets::BasicTiles,
-            position: Vector2::new(6, 1),
-            size: Vector2::new(1, 1),
-        }),
-    }
-}
-
 const GOLD_ORE_TILE_ID: TileId = 3;
-fn gold_ore_tile<S: NetworkSide>() -> Tile<S> {
-    Tile {
-        client_sprite: S::client_only(Sprite {
-            sheet: SpriteSheets::BasicTiles,
-            position: Vector2::new(6, 2),
-            size: Vector2::new(1, 1),
-        }),
-    }
-}

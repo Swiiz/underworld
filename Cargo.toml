@@ -30,8 +30,7 @@ rand_pcg = "0.3.1"
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 rand = "0.8.5"
 
-rlua = "0.20.0"
-
+mlua = { version = "0.9.6", default-features = false, features = ["serialize", "vendored", "lua54"] }
 
 [workspace]
 resolver = "2"

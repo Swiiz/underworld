@@ -1,7 +1,8 @@
 use cgmath::Vector2;
 use graphics::sprite::{Sprite, SpriteRegistry, SpriteSheetData, SpriteSheetKey};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum SpriteSheets {
     Characters,
     System,

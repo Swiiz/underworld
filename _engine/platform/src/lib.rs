@@ -11,11 +11,11 @@ pub use log::{debug, error, info, trace, warn};
 static LOGGER: Logger = Logger;
 static LOGGER_SIDE: RwLock<(String, Color)> = RwLock::new((String::new(), Color::White));
 
-pub const IGNORE_LIST: &'static [&'static str] = &["wgpu"];
+pub const IGNORE_LIST: &'static [&'static str] = &["wgpu", "naga"];
 
 pub(crate) fn init_logger() {
     log::set_logger(&LOGGER)
-        .map(|()| log::set_max_level(LevelFilter::Info))
+        .map(|()| log::set_max_level(LevelFilter::Trace))
         .expect("Could not set logger!")
 }
 
