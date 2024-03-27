@@ -12,7 +12,7 @@ use graphics::{
     sprite::{renderer::SpriteRenderer, Sprite, SpriteParams},
     Graphics,
 };
-use network::{ctx::Network, Client, ClientOnly, NetworkSide, Server};
+use network::{ctx::Network, Client, ClientOnly, NetworkSide, SerdePhantomData, Server};
 use platform::{
     debug, info,
     window::{Window, WindowPlatform, WindowPlatformEvent},
@@ -128,8 +128,8 @@ impl App<Server> {
         world.server_generate();
 
         Self {
-            window: PhantomData,
-            graphics: PhantomData,
+            window: SerdePhantomData::new(),
+            graphics: SerdePhantomData::new(),
             network,
             mods,
             world,

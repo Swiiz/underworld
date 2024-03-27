@@ -58,7 +58,21 @@ impl Log for Logger {
                 Level::Error => level.red(),
             };
 
-            println!("{} {} - {}", get_log_side_prefix(), level, record.args());
+            let mut log_origin = String::new();
+            if let Some(file) = record.file() {
+                log_origin += &format!("{file}:");
+                if let Some(line) = record.line() {
+                    log_origin += &line.to_string();
+                }
+            }
+
+            println!(
+                "{} {} {} - {}",
+                get_log_side_prefix(),
+                log_origin,
+                level,
+                record.args()
+            );
         }
     }
 

@@ -1,4 +1,3 @@
 {
-  "id": "vanilla",
-  "entrypoint": "main.lua"
+  "id": "vanilla"
 }

@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs, marker::PhantomData, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 use network::NetworkSide;
@@ -18,8 +23,10 @@ use super::api::ModsApi;
 #[derive(Serialize, Deserialize)]
 pub struct ModManifest {
     id: String,
-    entrypoint: PathBuf,
 }
+
+pub const MOD_SCRIPTS_FOLDER: &'static str = "scripts/";
+const LUA_ENTRYPOINT: &'static str = "main.lua";
 
 pub struct LoadedMod {
     root: PathBuf,
@@ -28,7 +35,7 @@ pub struct LoadedMod {
 
 impl LoadedMod {
     fn init<S: NetworkSide>(&self, api: &ModsApi<S>) {
-        let source = fs::read_to_string(self.root.join(&self.manifest.entrypoint))
+        let source = fs::read_to_string(self.root.join(MOD_SCRIPTS_FOLDER).join(LUA_ENTRYPOINT))
             .unwrap_or_else(|e| panic!("Could not read mod entryoint! {e}"));
         api.exec_lua(source)
             .unwrap_or_else(|e| warn!("Could not compile mod entrypoint, lua errored! {e}"));
@@ -42,9 +49,11 @@ pub struct ModLoader<S: NetworkSide> {
 
 impl<S: NetworkSide> ModLoader<S> {
     pub fn new() -> Self {
-        let api = ModsApi::new();
+        let mods_path = Path::new("mods");
 
-        let mods_dir = fs::read_dir("mods").expect("Could not read mods dir!");
+        let api = ModsApi::new(mods_path.into());
+
+        let mods_dir = fs::read_dir(mods_path).expect("Could not read mods dir!");
         let mut mods = HashMap::new();
         for entry in mods_dir {
             if let Ok((Ok(md), root)) = entry.map(|e| (e.metadata(), e.path())) {
