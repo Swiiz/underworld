@@ -1,0 +1,9 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+graphics = { path = "../graphics" }
+
+winit = "0.30.3"
