@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use assets::{load_sprite_sheets, Assets, SpriteSheets};
+use assets::{load_sprite_sheets, Assets};
 use cgmath::{Array, Matrix3, Vector2, Zero};
-use ecs::Entities;
-use entities::{
-    rendering::{draw_entities, Sprites2D},
+use core::{
+    rendering::{draw_entities, RenderData},
     spatial::Position,
 };
+use ecs::{Entities, Query};
 use graphics::{
     ctx::GraphicsCtx,
     renderer::Renderer,
@@ -14,21 +14,29 @@ use graphics::{
     Graphics,
 };
 use platform::AppLayer;
+use player::{PlayerController, PlayerTag};
 use tilemap::{tile::Tile, TileMap, TileMapStorage};
+use timer::Timer;
 use winit::{
+    event::DeviceEvent,
     event_loop::ActiveEventLoop,
     window::{Window, WindowId},
 };
 
 pub mod assets;
-pub mod entities;
+pub mod core;
 pub mod platform;
+pub mod player;
 pub mod tilemap;
+pub mod timer;
 
 pub struct Game {
     window: Arc<Window>,
     graphics: Graphics,
     assets: Assets,
+    timer: Timer,
+
+    controller: PlayerController,
 
     tile_maps: TileMapStorage,
     entities: Entities,
@@ -36,6 +44,8 @@ pub struct Game {
 
 impl AppLayer for Game {
     fn new(event_loop: &ActiveEventLoop) -> Self {
+        let timer = Timer::new();
+
         let window = Arc::new(
             event_loop
                 .create_window(Window::default_attributes())
@@ -50,6 +60,8 @@ impl AppLayer for Game {
             },
             ctx,
         };
+
+        let controller = PlayerController::default();
 
         let mut tile_maps = TileMapStorage::new();
 
@@ -67,9 +79,9 @@ impl AppLayer for Game {
 
         entities
             .spawn()
-            .set("Player")
+            .set(PlayerTag)
             .set(Position(Vector2::zero()))
-            .set(Sprites2D::new().with(
+            .set(RenderData::new().with(
                 Sprite {
                     position: Vector2::zero(),
                     sheet: sprite_sheets.characters,
@@ -86,18 +98,31 @@ impl AppLayer for Game {
             window,
             graphics,
             assets: Assets { sprite_sheets },
-
+            timer,
+            controller,
             tile_maps,
             entities,
         }
     }
 
     fn render(&mut self, _: WindowId) {
+        let _dt = self.timer.render_dt();
         self.graphics.render(|mut frame| {
             self.tile_maps.render_selected(&mut frame, &self.assets);
 
             draw_entities(&self.entities, &mut frame);
         });
+    }
+
+    fn update(&mut self) {
+        let dt = self.timer.update_dt();
+        for e in self.entities.with::<PlayerTag>().iter() {
+            self.controller.update_player_entity(e, dt)
+        }
+    }
+
+    fn input(&mut self, event: DeviceEvent) {
+        self.controller.handle_platform_input(&event);
     }
 
     fn window_resized(&mut self) {

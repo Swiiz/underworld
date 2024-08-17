@@ -1,7 +1,7 @@
-use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
+use winit::{application::ApplicationHandler, event::DeviceEvent};
 
 pub struct Platform<T: AppLayer> {
     app: Option<T>,
@@ -34,12 +34,29 @@ impl<T: AppLayer> ApplicationHandler for Platform<T> {
             _ => (),
         }
     }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(app) = &mut self.app else {
+            return;
+        };
+
+        app.update();
+    }
+
+    fn device_event(&mut self, _: &ActiveEventLoop, _: winit::event::DeviceId, event: DeviceEvent) {
+        let Some(app) = &mut self.app else {
+            return;
+        };
+
+        app.input(event);
+    }
 }
 
 pub trait AppLayer {
     fn new(event_loop: &ActiveEventLoop) -> Self;
     fn render(&mut self, _: WindowId) {}
-    fn update(&mut self, _: WindowId) {}
+    fn update(&mut self) {}
+    fn input(&mut self, _: DeviceEvent) {}
     fn window_resized(&mut self) {}
     fn windows(&self) -> Vec<&Window>;
 }

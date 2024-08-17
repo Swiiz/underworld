@@ -7,11 +7,11 @@ use graphics::{
 
 use super::spatial::Position;
 
-pub struct Sprites2D {
+pub struct RenderData {
     sprites: Vec<(Sprite, SpriteDrawParams)>,
 }
 
-impl Sprites2D {
+impl RenderData {
     pub fn new() -> Self {
         Self {
             sprites: Vec::new(),
@@ -41,7 +41,7 @@ impl Sprites2D {
 }
 
 pub fn draw_entities(entities: &Entities, frame: &mut Frame) {
-    for entity in entities.with::<Sprites2D>().iter() {
+    for entity in entities.with::<RenderData>().iter() {
         let pos = entity
             .get::<Position>()
             .map(|x| x.0)
@@ -49,6 +49,6 @@ pub fn draw_entities(entities: &Entities, frame: &mut Frame) {
 
         let transform = Matrix3::from_translation(pos);
 
-        entity.get::<Sprites2D>().unwrap().draw(transform, frame);
+        entity.get::<RenderData>().unwrap().draw(transform, frame);
     }
 }
