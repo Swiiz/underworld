@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 graphics = { path = "../graphics" }
+ecs = { path = "../ecs" }
+cgmath = { version = "0.18.0", features = ["serde"]}
 
 winit = "0.30.3"

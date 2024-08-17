@@ -1,9 +1,14 @@
 use std::sync::Arc;
 
 use assets::{load_sprite_sheets, Assets, SpriteSheets};
+use cgmath::{Array, Matrix3, Vector2, Zero};
+use ecs::Entities;
+use entities::{
+    rendering::{draw_entities, Sprites2D},
+    spatial::Position,
+};
 use graphics::{
     ctx::GraphicsCtx,
-    maths::{Array, Matrix3, Vector2, Zero},
     renderer::Renderer,
     sprite::{renderer::SpriteRenderer, Sprite, SpriteDrawParams},
     Graphics,
@@ -16,6 +21,7 @@ use winit::{
 };
 
 pub mod assets;
+pub mod entities;
 pub mod platform;
 pub mod tilemap;
 
@@ -25,6 +31,7 @@ pub struct Game {
     assets: Assets,
 
     tile_maps: TileMapStorage,
+    entities: Entities,
 }
 
 impl AppLayer for Game {
@@ -56,23 +63,16 @@ impl AppLayer for Game {
 
         tile_maps.add_tile_map(TileMap::new(Vector2::new(16, 16), debug_tile));
 
-        Self {
-            window,
-            graphics,
-            assets: Assets { sprite_sheets },
+        let mut entities = Entities::new();
 
-            tile_maps,
-        }
-    }
-
-    fn render(&mut self, _: WindowId) {
-        self.graphics.render(|mut frame| {
-            self.tile_maps.render_selected(&mut frame, &self.assets);
-
-            frame.renderer.sprites.draw(
+        entities
+            .spawn()
+            .set("Player")
+            .set(Position(Vector2::zero()))
+            .set(Sprites2D::new().with(
                 Sprite {
                     position: Vector2::zero(),
-                    sheet: self.assets.sprite_sheets.characters,
+                    sheet: sprite_sheets.characters,
                     size: Vector2::from_value(1),
                 },
                 SpriteDrawParams {
@@ -80,7 +80,23 @@ impl AppLayer for Game {
                         * Matrix3::from_translation(Vector2::from_value(-0.5)),
                     ..Default::default()
                 },
-            );
+            ));
+
+        Self {
+            window,
+            graphics,
+            assets: Assets { sprite_sheets },
+
+            tile_maps,
+            entities,
+        }
+    }
+
+    fn render(&mut self, _: WindowId) {
+        self.graphics.render(|mut frame| {
+            self.tile_maps.render_selected(&mut frame, &self.assets);
+
+            draw_entities(&self.entities, &mut frame);
         });
     }
 
