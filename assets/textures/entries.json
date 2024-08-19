@@ -1,0 +1,14 @@
+{
+    "debug": {
+        "path": "debug.png",
+        "sprite_px_size": [16, 16]
+    },
+    "characters": {
+        "path": "characters.png",
+        "sprite_px_size": [16, 16]
+    },
+    "tilemap_overlay": {
+        "path": "tilemap_overlay.png",
+        "sprite_px_size": [16, 16]  
+    }
+}

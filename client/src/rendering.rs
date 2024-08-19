@@ -5,10 +5,12 @@ use graphics::{
     sprite::{Sprite, SpriteDrawParams},
 };
 
-use super::spatial::Position;
+use crate::camera::Camera;
+
+use common::core::spatial::Position;
 
 pub struct RenderData {
-    sprites: Vec<(Sprite, SpriteDrawParams)>,
+    pub sprites: Vec<(Sprite, SpriteDrawParams)>,
 }
 
 impl RenderData {
@@ -32,7 +34,9 @@ impl RenderData {
             frame.renderer.sprites.draw(
                 sprite.clone(),
                 SpriteDrawParams {
-                    transform: transform * draw_params.transform,
+                    transform: transform
+                        * draw_params.transform
+                        * Matrix3::from_translation(-Vector2::new(0.5, 0.5)),
                     ..draw_params.clone()
                 },
             );
@@ -40,14 +44,14 @@ impl RenderData {
     }
 }
 
-pub fn draw_entities(entities: &Entities, frame: &mut Frame) {
+pub fn draw_entities(entities: &Entities, frame: &mut Frame, camera: &Camera) {
     for entity in entities.with::<RenderData>().iter() {
         let pos = entity
             .get::<Position>()
             .map(|x| x.0)
             .unwrap_or(Vector2::new(0.0, 0.0));
 
-        let transform = Matrix3::from_translation(pos);
+        let transform = camera.view_transform() * Matrix3::from_translation(pos);
 
         entity.get::<RenderData>().unwrap().draw(transform, frame);
     }

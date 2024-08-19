@@ -4,8 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+common = { path = "../common" }
+
 graphics = { path = "../graphics" }
 ecs = { path = "../ecs" }
 cgmath = { version = "0.18.0", features = ["serde"]}
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 winit = "0.30.3"
+uflow = "0.7.1"

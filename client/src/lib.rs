@@ -1,48 +1,58 @@
 use std::sync::Arc;
 
-use assets::{load_sprite_sheets, Assets};
-use cgmath::{Array, Matrix3, Vector2, Zero};
-use core::{
-    rendering::{draw_entities, RenderData},
-    spatial::Position,
+use assets::GraphicAssets;
+use camera::Camera;
+use cgmath::{Array, Vector2, Zero};
+use common::{core::spatial::Position, utils::timer::Timer};
+use common::{
+    tilemap::{tile::Tile, TileMap},
+    utils::registry::Registry,
 };
-use ecs::{Entities, Query};
+use ecs::{Entities, Entity, EntityId};
 use graphics::{
     ctx::GraphicsCtx,
     renderer::Renderer,
     sprite::{renderer::SpriteRenderer, Sprite, SpriteDrawParams},
     Graphics,
 };
-use platform::AppLayer;
-use player::{PlayerController, PlayerTag};
-use tilemap::{tile::Tile, TileMap, TileMapStorage};
-use timer::Timer;
+use platform::{AppLayer, PlatformInput};
+use player::PlayerController;
+use rendering::{draw_entities, RenderData};
+use tilemap::{ClientTile, ClientTileMap, ClientTileRegistry};
+use uflow::{
+    client::{Client, Config},
+    SendMode,
+};
 use winit::{
-    event::DeviceEvent,
     event_loop::ActiveEventLoop,
     window::{Window, WindowId},
 };
 
 pub mod assets;
-pub mod core;
+pub mod camera;
 pub mod platform;
 pub mod player;
+pub mod rendering;
 pub mod tilemap;
-pub mod timer;
 
-pub struct Game {
+pub struct GameClient {
     window: Arc<Window>,
     graphics: Graphics,
-    assets: Assets,
+    assets: GraphicAssets,
     timer: Timer,
 
+    network: Client,
+
+    camera: Camera,
+    player_entity: EntityId,
     controller: PlayerController,
 
-    tile_maps: TileMapStorage,
+    tiles: ClientTileRegistry,
+    terrain: ClientTileMap,
     entities: Entities,
 }
 
-impl AppLayer for Game {
+impl AppLayer for GameClient {
     fn new(event_loop: &ActiveEventLoop) -> Self {
         let timer = Timer::new();
 
@@ -53,7 +63,7 @@ impl AppLayer for Game {
         );
 
         let ctx = GraphicsCtx::new(window.inner_size(), window.clone());
-        let (sprite_sheets, sprite_sheets_registry) = load_sprite_sheets();
+        let (assets, sprite_sheets_registry) = GraphicAssets::load();
         let graphics = Graphics {
             renderer: Renderer {
                 sprites: SpriteRenderer::new(&ctx, window.inner_size(), &sprite_sheets_registry),
@@ -61,68 +71,117 @@ impl AppLayer for Game {
             ctx,
         };
 
+        let server_address = "127.0.0.1:8888";
+
+        let mut network =
+            Client::connect(server_address, Default::default()).expect("Invalid address");
+        network.send("Hello world!".as_bytes().into(), 0, SendMode::Reliable);
+
+        let camera = Camera::new();
         let controller = PlayerController::default();
 
-        let mut tile_maps = TileMapStorage::new();
+        let mut tiles = Registry::new();
 
-        let debug_tile = tile_maps.tile_registry.add_tile(Tile {
+        let debug_tile = tiles.register(ClientTile {
             sprite: Sprite {
-                position: Vector2::zero(),
-                sheet: sprite_sheets.debug,
+                pos: Vector2::zero(),
+                sheet: assets.get_texture("debug"),
                 size: Vector2::from_value(1),
             },
+            common: Tile::default(),
         });
 
-        tile_maps.add_tile_map(TileMap::new(Vector2::new(16, 16), debug_tile));
+        let terrain = ClientTileMap::new(TileMap::new(Vector2::new(16, 16), debug_tile));
 
         let mut entities = Entities::new();
 
-        entities
+        let player_entity = entities
             .spawn()
-            .set(PlayerTag)
             .set(Position(Vector2::zero()))
             .set(RenderData::new().with(
                 Sprite {
-                    position: Vector2::zero(),
-                    sheet: sprite_sheets.characters,
+                    pos: Vector2::zero(),
+                    sheet: assets.get_texture("characters"),
                     size: Vector2::from_value(1),
                 },
                 SpriteDrawParams {
-                    transform: Matrix3::from_scale(0.1)
-                        * Matrix3::from_translation(Vector2::from_value(-0.5)),
                     ..Default::default()
                 },
-            ));
+            ))
+            .id();
 
         Self {
             window,
             graphics,
-            assets: Assets { sprite_sheets },
+            assets,
+            network,
             timer,
+            camera,
             controller,
-            tile_maps,
+            player_entity,
+            tiles,
+            terrain,
             entities,
         }
     }
 
     fn render(&mut self, _: WindowId) {
         let _dt = self.timer.render_dt();
-        self.graphics.render(|mut frame| {
-            self.tile_maps.render_selected(&mut frame, &self.assets);
 
-            draw_entities(&self.entities, &mut frame);
+        if let Some(player) = self.entities.get(&self.player_entity) {
+            self.camera.pos = player.get::<Position>().unwrap().0;
+        }
+
+        self.graphics.render(|mut frame| {
+            self.terrain
+                .render(&mut frame, &self.assets, &self.tiles, &self.camera);
+
+            draw_entities(&self.entities, &mut frame, &self.camera);
         });
     }
 
     fn update(&mut self) {
         let dt = self.timer.update_dt();
-        for e in self.entities.with::<PlayerTag>().iter() {
-            self.controller.update_player_entity(e, dt)
+
+        for event in self.network.step() {
+            match event {
+                uflow::client::Event::Connect => {
+                    println!("Connected to the server");
+                    // TODO: Handle connection
+                }
+                uflow::client::Event::Disconnect => {
+                    println!("Disconnected from the server, you may close the window");
+                    // TODO: Handle disconnection
+                }
+                uflow::client::Event::Error(error) => {
+                    // TODO: Handle connection error
+                }
+                uflow::client::Event::Receive(packet_data) => {
+                    println!("Received packet: {:?}", std::str::from_utf8(&packet_data));
+                    // TODO: Handle received packets
+                }
+            }
         }
+
+        // Send data, update client application state
+        // ...
+
+        if let Some(player) = self.entities.get(&self.player_entity) {
+            self.controller.update_entity(&player, dt);
+        }
+
+        self.network.flush();
     }
 
-    fn input(&mut self, event: DeviceEvent) {
+    fn input(&mut self, _: WindowId, event: PlatformInput) {
+        self.terrain.input(&event, self.window.inner_size());
         self.controller.handle_platform_input(&event);
+        self.camera.handle_scroll(&event);
+    }
+
+    fn on_exit(&mut self) {
+        self.network.disconnect_now();
+        let _ = self.network.step();
     }
 
     fn window_resized(&mut self) {

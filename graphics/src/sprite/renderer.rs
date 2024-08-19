@@ -1,7 +1,7 @@
 use std::{mem::size_of, num::NonZeroU64};
 
 use bytemuck::{cast_slice, Pod, Zeroable};
-use cgmath::{Array, Matrix3, Vector2};
+use cgmath::{Array, Matrix3};
 
 use crate::{
     color::Color3,
@@ -86,7 +86,7 @@ impl SpriteRenderer {
 
         self.queue.push(SpriteInstance {
             transform: (self.proj_matrix * params.transform).into(),
-            tex_pos: spritesheet.tex_coords(sprite.position).into(),
+            tex_pos: spritesheet.tex_coords(sprite.pos).into(),
             tex_dims: spritesheet.tex_dims(sprite.size).into(),
             tint: params.tint.into(),
             z_index: params.depth,

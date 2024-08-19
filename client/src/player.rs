@@ -1,13 +1,8 @@
+use crate::{platform::PlatformInput, rendering::RenderData};
+use cgmath::{InnerSpace, Vector2, Zero};
+use common::{core::spatial::Position, utils::maths::MaybeNan};
 use ecs::Entity;
-use winit::{
-    event::{DeviceEvent, RawKeyEvent},
-    keyboard::{KeyCode, PhysicalKey},
-};
-
-use crate::core::spatial::Position;
-
-/// Player component
-pub struct PlayerTag;
+use winit::{event::ElementState, keyboard::KeyCode};
 
 /// Player controller
 pub enum PlayerController {
@@ -31,7 +26,7 @@ impl Default for PlayerController {
 }
 
 impl PlayerController {
-    pub fn handle_platform_input(&mut self, input: &DeviceEvent) {
+    pub fn handle_platform_input(&mut self, input: &PlatformInput) {
         match self {
             PlayerController::Moving {
                 forward,
@@ -39,24 +34,21 @@ impl PlayerController {
                 left,
                 right,
             } => match input {
-                DeviceEvent::Key(RawKeyEvent {
-                    state,
-                    physical_key: PhysicalKey::Code(keycode),
-                }) => {
-                    *match keycode {
+                &PlatformInput::Keyboard { key, state } => {
+                    *match key {
                         KeyCode::KeyW => forward,
                         KeyCode::KeyS => backward,
                         KeyCode::KeyA => left,
                         KeyCode::KeyD => right,
                         _ => return,
-                    } = state == &winit::event::ElementState::Pressed
+                    } = state == ElementState::Pressed
                 }
                 _ => {}
             },
         }
     }
 
-    pub fn update_player_entity(&self, entity: impl Entity, dt: f32) {
+    pub fn update_entity(&self, entity: &impl Entity, dt: f32) {
         match self {
             PlayerController::Moving {
                 forward,
@@ -64,20 +56,32 @@ impl PlayerController {
                 left,
                 right,
             } => {
-                let mut pos = entity.get_mut::<Position>().unwrap();
+                let mut render_data = entity.get_mut::<RenderData>().unwrap();
+                let sheet_pos = &mut render_data.sprites[0].0.pos;
+
+                let mut dir = Vector2::<f32>::zero();
 
                 if *forward {
-                    pos.y += dt;
+                    *sheet_pos = Vector2::new(1, 3);
+                    dir.y += 1.;
                 }
                 if *backward {
-                    pos.y -= dt;
+                    *sheet_pos = Vector2::new(1, 0);
+                    dir.y -= 1.;
                 }
                 if *left {
-                    pos.x -= dt;
+                    *sheet_pos = Vector2::new(1, 1);
+                    dir.x -= 1.;
                 }
                 if *right {
-                    pos.x += dt;
+                    *sheet_pos = Vector2::new(1, 2);
+                    dir.x += 1.;
                 }
+
+                let mut pos = entity.get_mut::<Position>().unwrap();
+                let speed = 5.0;
+
+                pos.0 += (dir.normalize() * dt * speed).no_nan();
             }
         }
     }

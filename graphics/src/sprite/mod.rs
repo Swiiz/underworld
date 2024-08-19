@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use cgmath::{Array, Matrix3, SquareMatrix, Vector2};
-use renderer::SpriteRenderer;
 use serde::{Deserialize, Serialize};
 use texture_packer::{
     exporter::ImageExporter, importer::ImageImporter, texture::Texture as _, TexturePacker,
@@ -60,7 +59,7 @@ pub struct SpriteSheetHandle(usize);
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct Sprite {
     pub sheet: SpriteSheetHandle,
-    pub position: Vector2<u32>,
+    pub pos: Vector2<u32>,
     pub size: Vector2<u32>,
 }
 

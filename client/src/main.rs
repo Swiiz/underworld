@@ -1,5 +1,5 @@
-use client::Game;
+use client::GameClient;
 
 fn main() {
-    client::platform::run_app::<Game>();
+    client::platform::run_app::<GameClient>();
 }

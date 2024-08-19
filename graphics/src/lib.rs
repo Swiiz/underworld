@@ -1,7 +1,5 @@
-use cgmath::{Array, Matrix3, Vector2};
 use ctx::{Frame, GraphicsCtx};
 use renderer::Renderer;
-use wgpu::SurfaceTarget;
 
 pub mod color;
 pub mod ctx;
