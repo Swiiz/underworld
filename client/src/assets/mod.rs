@@ -2,11 +2,11 @@ use std::{collections::HashMap, path::PathBuf};
 
 use graphics::sprite::{SpriteSheetData, SpriteSheetHandle, SpriteSheetsRegistry};
 
-pub struct GraphicAssets {
+pub struct Assets {
     textures: HashMap<String, SpriteSheetHandle>,
 }
 
-impl GraphicAssets {
+impl Assets {
     pub fn load() -> (Self, SpriteSheetsRegistry) {
         let mut textures = HashMap::new();
         let mut reg = SpriteSheetsRegistry::default();

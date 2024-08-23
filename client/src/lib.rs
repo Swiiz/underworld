@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use assets::GraphicAssets;
+use assets::Assets;
 use camera::Camera;
 use cgmath::{Array, Vector2, Zero};
 use common::{core::spatial::Position, utils::timer::Timer};
@@ -15,14 +15,11 @@ use graphics::{
     sprite::{renderer::SpriteRenderer, Sprite, SpriteDrawParams},
     Graphics,
 };
+use network::NetworkClient;
 use platform::{AppLayer, PlatformInput};
 use player::PlayerController;
 use rendering::{draw_entities, RenderData};
 use tilemap::{ClientTile, ClientTileMap, ClientTileRegistry};
-use uflow::{
-    client::{Client, Config},
-    SendMode,
-};
 use winit::{
     event_loop::ActiveEventLoop,
     window::{Window, WindowId},
@@ -30,6 +27,7 @@ use winit::{
 
 pub mod assets;
 pub mod camera;
+pub mod network;
 pub mod platform;
 pub mod player;
 pub mod rendering;
@@ -38,10 +36,10 @@ pub mod tilemap;
 pub struct GameClient {
     window: Arc<Window>,
     graphics: Graphics,
-    assets: GraphicAssets,
+    assets: Assets,
     timer: Timer,
 
-    network: Client,
+    network: NetworkClient,
 
     camera: Camera,
     player_entity: EntityId,
@@ -63,7 +61,7 @@ impl AppLayer for GameClient {
         );
 
         let ctx = GraphicsCtx::new(window.inner_size(), window.clone());
-        let (assets, sprite_sheets_registry) = GraphicAssets::load();
+        let (assets, sprite_sheets_registry) = Assets::load();
         let graphics = Graphics {
             renderer: Renderer {
                 sprites: SpriteRenderer::new(&ctx, window.inner_size(), &sprite_sheets_registry),
@@ -72,10 +70,7 @@ impl AppLayer for GameClient {
         };
 
         let server_address = "127.0.0.1:8888";
-
-        let mut network =
-            Client::connect(server_address, Default::default()).expect("Invalid address");
-        network.send("Hello world!".as_bytes().into(), 0, SendMode::Reliable);
+        let network = NetworkClient::new(server_address);
 
         let camera = Camera::new();
         let controller = PlayerController::default();
@@ -143,25 +138,9 @@ impl AppLayer for GameClient {
     fn update(&mut self) {
         let dt = self.timer.update_dt();
 
-        for event in self.network.step() {
-            match event {
-                uflow::client::Event::Connect => {
-                    println!("Connected to the server");
-                    // TODO: Handle connection
-                }
-                uflow::client::Event::Disconnect => {
-                    println!("Disconnected from the server, you may close the window");
-                    // TODO: Handle disconnection
-                }
-                uflow::client::Event::Error(error) => {
-                    // TODO: Handle connection error
-                }
-                uflow::client::Event::Receive(packet_data) => {
-                    println!("Received packet: {:?}", std::str::from_utf8(&packet_data));
-                    // TODO: Handle received packets
-                }
-            }
-        }
+        self.network.handle_packets(|packet| {
+            // handle packets
+        });
 
         // Send data, update client application state
         // ...
@@ -179,9 +158,8 @@ impl AppLayer for GameClient {
         self.camera.handle_scroll(&event);
     }
 
-    fn on_exit(&mut self) {
-        self.network.disconnect_now();
-        let _ = self.network.step();
+    fn exit(&mut self) {
+        self.network.exit();
     }
 
     fn window_resized(&mut self) {

@@ -8,7 +8,7 @@ use graphics::{
     sprite::{Sprite, SpriteDrawParams},
 };
 
-use crate::{assets::GraphicAssets, camera::Camera, platform::PlatformInput};
+use crate::{assets::Assets, camera::Camera, platform::PlatformInput};
 
 pub type ClientTileRegistry = Registry<ClientTile>;
 
@@ -33,7 +33,7 @@ impl ClientTileMap {
     pub fn render(
         &self,
         frame: &mut Frame,
-        assets: &GraphicAssets,
+        assets: &Assets,
         tile_registry: &ClientTileRegistry,
         camera: &Camera,
     ) {
@@ -82,7 +82,7 @@ impl ClientTileMap {
 fn render_chunk(
     chunk: &TileChunk,
     frame: &mut Frame,
-    assets: &GraphicAssets,
+    _assets: &Assets,
     chunk_coords: &ChunkCoord,
     tile_registry: &ClientTileRegistry,
     camera: &Camera,

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cgmath::{Vector2, Zero};
+use cgmath::Vector2;
 
 use crate::utils::registry::RecordId;
 

@@ -74,7 +74,7 @@ impl<T: AppLayer> ApplicationHandler for Platform<T> {
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, _: &ActiveEventLoop) {
         let Some(app) = &mut self.app else {
             return;
         };
@@ -82,12 +82,12 @@ impl<T: AppLayer> ApplicationHandler for Platform<T> {
         app.update();
     }
 
-    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+    fn exiting(&mut self, _: &ActiveEventLoop) {
         let Some(app) = &mut self.app else {
             return;
         };
 
-        app.on_exit();
+        app.exit();
     }
 }
 
@@ -102,7 +102,7 @@ pub trait AppLayer {
     fn render(&mut self, _: WindowId) {}
     fn update(&mut self) {}
     fn input(&mut self, _: WindowId, _: PlatformInput) {}
-    fn on_exit(&mut self) {}
+    fn exit(&mut self) {}
     fn window_resized(&mut self) {}
     fn windows(&self) -> Vec<&Window>;
 }

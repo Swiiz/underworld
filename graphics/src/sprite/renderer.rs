@@ -1,7 +1,7 @@
 use std::{mem::size_of, num::NonZeroU64};
 
 use bytemuck::{cast_slice, Pod, Zeroable};
-use cgmath::{Array, Matrix3};
+use cgmath::Matrix3;
 
 use crate::{
     color::Color3,

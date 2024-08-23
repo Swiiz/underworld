@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use cgmath::{Array, Matrix3, SquareMatrix, Vector2};
+use cgmath::{Matrix3, SquareMatrix, Vector2};
 use serde::{Deserialize, Serialize};
 use texture_packer::{
     exporter::ImageExporter, importer::ImageImporter, texture::Texture as _, TexturePacker,

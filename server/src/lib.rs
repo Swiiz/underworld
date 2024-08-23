@@ -1,59 +1,34 @@
-use std::{collections::HashSet, net::SocketAddr};
+pub mod network;
 
-use uflow::server::Server;
+use network::NetworkServer;
 
 pub fn run_server() {
     let mut server = GameServer::new();
 
     loop {
         server.update();
+        std::thread::sleep(std::time::Duration::from_secs_f32(1. / 60.));
     }
 }
 
 pub struct GameServer {
-    network: Server,
-    clients: HashSet<SocketAddr>,
+    network: NetworkServer,
 }
 
 impl GameServer {
     pub fn new() -> Self {
-        let server_address = "127.0.0.1:8888";
-        let config = uflow::server::Config {
-            max_active_connections: 16,
-            ..Default::default()
-        };
+        let network = NetworkServer::new();
 
-        let network =
-            Server::bind(server_address, config).expect("Failed to bind/configure socket");
-        let clients = HashSet::new();
-
-        Self { network, clients }
+        Self { network }
     }
 
     pub fn update(&mut self) {
-        for event in self.network.step() {
-            match event {
-                uflow::server::Event::Connect(client_address) => {
-                    println!("Client connected: {:?}", client_address);
-                    self.clients.insert(client_address);
-                }
-                uflow::server::Event::Disconnect(client_address) => {
-                    println!("Client disconnected: {:?}", client_address);
-                    self.clients.remove(&client_address);
-                }
-                uflow::server::Event::Error(client_address, error) => {
-                    // TODO: Handle connection error
-                }
-                uflow::server::Event::Receive(client_address, packet_data) => {
-                    // TODO: Handle incoming packet
-                }
-            }
-        }
+        self.network.handle_packets(|client_addr, packet| {
+            // handle packets
+        });
 
         // Send data, update server state
 
         self.network.flush();
-
-        std::thread::sleep(std::time::Duration::from_millis(1000 / 60));
     }
 }
