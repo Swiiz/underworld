@@ -1,20 +1,42 @@
 use cgmath::{Array, Matrix3, Vector2, Zero};
 use common::{
-    tilemap::{tile::Tile, ChunkCoord, TileChunk, TileMap},
-    utils::registry::Registry,
+    tilemap::{ChunkCoord, TileChunk, TileMap},
+    utils::handle::{DynamicHandle, HandleType, HandleTypeUnion, StaticHandle},
 };
 use graphics::{
     ctx::Frame,
-    sprite::{Sprite, SpriteDrawParams},
+    sprite::{Sprite, SpriteDrawParams, SpriteSheetHandle},
+};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    assets::{ClientAssets, TexturesRegistry},
+    camera::Camera,
+    platform::PlatformInput,
 };
 
-use crate::{assets::Assets, camera::Camera, platform::PlatformInput};
+pub struct SpriteHandles;
+impl HandleTypeUnion for SpriteHandles {
+    type Static = String;
+    type Dynamic = SpriteSheetHandle;
+}
 
-pub type ClientTileRegistry = Registry<ClientTile>;
+pub fn load_handles(
+    tile: ClientTileData<StaticHandle>,
+    textures: &TexturesRegistry,
+) -> ClientTileData<DynamicHandle> {
+    ClientTileData {
+        sprite: Sprite {
+            sheet: textures.get_id(&tile.sprite.sheet).clone(),
+            pos: tile.sprite.pos,
+            size: tile.sprite.size,
+        },
+    }
+}
 
-pub struct ClientTile {
-    pub common: Tile,
-    pub sprite: Sprite,
+#[derive(Serialize, Deserialize)]
+pub struct ClientTileData<T: HandleType = DynamicHandle> {
+    pub sprite: Sprite<T::Handle<SpriteHandles>>,
 }
 
 pub struct ClientTileMap {
@@ -30,20 +52,14 @@ impl ClientTileMap {
         }
     }
 
-    pub fn render(
-        &self,
-        frame: &mut Frame,
-        assets: &Assets,
-        tile_registry: &ClientTileRegistry,
-        camera: &Camera,
-    ) {
+    pub fn render(&self, frame: &mut Frame, assets: &ClientAssets, camera: &Camera) {
         for (chunk_coords, chunk) in self.common.chunks.iter() {
-            render_chunk(&chunk, frame, assets, &chunk_coords, tile_registry, camera)
+            render_chunk(&chunk, frame, assets, &chunk_coords, camera)
         }
 
         frame.renderer.sprites.draw(
             Sprite {
-                sheet: assets.get_texture("tilemap_overlay").clone(),
+                sheet: assets.textures.get_id("tilemap_overlay").clone(),
                 pos: Vector2::zero(),
                 size: Vector2::new(1, 1),
             },
@@ -82,16 +98,15 @@ impl ClientTileMap {
 fn render_chunk(
     chunk: &TileChunk,
     frame: &mut Frame,
-    _assets: &Assets,
+    assets: &ClientAssets,
     chunk_coords: &ChunkCoord,
-    tile_registry: &ClientTileRegistry,
     camera: &Camera,
 ) {
     let chunk_coords = chunk_coords.to_tile_coords();
 
     for (y, row) in chunk.tiles.iter().enumerate() {
         for (x, tile) in row.iter().enumerate() {
-            let tile = tile_registry.get(*tile);
+            let (_, tile) = assets.tiles.lookup(*tile);
             let coords = chunk_coords + Vector2::new(x as i32, y as i32);
             frame.renderer.sprites.draw(
                 tile.sprite,

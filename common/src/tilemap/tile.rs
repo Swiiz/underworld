@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::utils::registry::RecordId;
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Tile {}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,6 +1,6 @@
 use std::net::ToSocketAddrs;
 
-use common::network::{proto::v1_network_protocol, AnyPacket, Protocol};
+use common::network::{proto::network_protocol, AnyPacket, Protocol};
 use serde::Serialize;
 use uflow::{client::Client, SendMode};
 
@@ -10,17 +10,14 @@ pub struct NetworkClient {
 }
 
 impl NetworkClient {
-    pub fn new(address: impl ToSocketAddrs) -> Self {
-        let mut socket = Client::connect(address, Default::default()).expect("Invalid address");
-        socket.send("Ping!".as_bytes().into(), 0, SendMode::Reliable);
-
+    pub fn connect_to(address: impl ToSocketAddrs) -> Self {
         Self {
-            socket,
-            protocol: v1_network_protocol(),
+            socket: Client::connect(address, Default::default()).expect("Invalid address"),
+            protocol: network_protocol(),
         }
     }
 
-    pub fn handle_packets(&mut self, handler: impl Fn(AnyPacket)) {
+    pub fn handle_packets(&mut self, mut handler: impl FnMut(AnyPacket)) {
         for event in self.socket.step() {
             match event {
                 uflow::client::Event::Connect => {

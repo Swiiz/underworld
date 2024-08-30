@@ -1,0 +1,14 @@
+{
+  "debug":  {
+    "@client": {
+      "sprite": {
+       "pos": [0, 0],
+       "sheet": "debug",
+       "size": [1, 1]
+      }
+    },
+    "@common": {
+      "_": "_"
+    }
+  }
+}

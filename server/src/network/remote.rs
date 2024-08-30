@@ -1,7 +1,4 @@
-pub struct NetRemoteClient {}
-
-impl NetRemoteClient {
-    pub fn new() -> Self {
-        Self {}
-    }
+pub enum NetRemoteClient {
+    Connecting,
+    Online { username: String },
 }

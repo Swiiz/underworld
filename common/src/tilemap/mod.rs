@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
 use cgmath::Vector2;
+use serde::{Deserialize, Serialize};
 
 use crate::utils::registry::RecordId;
 
 pub mod tile;
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TileMap {
     pub chunks: HashMap<ChunkCoord, TileChunk>,
 }
@@ -32,6 +34,8 @@ impl TileMap {
 }
 
 const CHUNK_SIZE: Vector2<i32> = Vector2::new(16, 16);
+
+#[derive(Clone, Deserialize, Serialize)]
 pub struct TileChunk {
     pub tiles: [[RecordId; CHUNK_SIZE.x as usize]; CHUNK_SIZE.y as usize],
 }
@@ -44,7 +48,7 @@ impl TileChunk {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(pub Vector2<i32>);
 
 impl ChunkCoord {

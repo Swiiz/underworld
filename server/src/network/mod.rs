@@ -1,6 +1,6 @@
 use std::{collections::HashMap, net::SocketAddr};
 
-use common::network::{proto::v1_network_protocol, AnyPacket, Protocol};
+use common::network::{proto::network_protocol, AnyPacket, Protocol};
 use remote::NetRemoteClient;
 use serde::Serialize;
 use uflow::{server::Server, SendMode};
@@ -23,36 +23,37 @@ impl NetworkServer {
 
         let network =
             Server::bind(server_address, config).expect("Failed to bind/configure socket");
+        println!("Server listening on {server_address}");
         let clients = HashMap::new();
 
         Self {
-            protocol: v1_network_protocol(),
+            protocol: network_protocol(),
             socket: network,
             clients,
         }
     }
 
-    pub fn handle_packets(&mut self, handler: impl Fn(SocketAddr, AnyPacket)) {
+    pub fn handle_packets(
+        &mut self,
+        mut handler: impl FnMut(SocketAddr, &mut NetRemoteClient, AnyPacket),
+    ) {
         for event in self.socket.step() {
             match event {
                 uflow::server::Event::Connect(client_address) => {
-                    println!("Client connected: {:?}", client_address);
-                    self.clients.insert(client_address, NetRemoteClient::new());
+                    self.clients
+                        .insert(client_address, NetRemoteClient::Connecting);
                 }
                 uflow::server::Event::Disconnect(client_address) => {
-                    println!("Client disconnected: {:?}", client_address);
                     self.clients.remove(&client_address);
                 }
                 uflow::server::Event::Error(client_address, error) => {
-                    println!(
-                        "Client disconnected: {:?} with error: {:?}",
-                        client_address, error
-                    );
+                    println!("Client disconnected with error: {:?}", error);
                     self.clients.remove(&client_address);
                 }
-                uflow::server::Event::Receive(client_address, packet_data) => {
+                uflow::server::Event::Receive(addr, packet_data) => {
                     if let Some(p) = self.protocol.decode(&packet_data) {
-                        handler(client_address, p);
+                        let remote = self.clients.get_mut(&addr).unwrap();
+                        handler(addr, remote, p);
                     }
                 }
             }
@@ -61,11 +62,11 @@ impl NetworkServer {
 
     pub fn send_to<'a, T: Serialize + 'static>(
         &mut self,
-        packet: T,
+        packet: &T,
         addrs: impl IntoIterator<Item = &'a SocketAddr>,
         mode: SendMode,
     ) {
-        let data = self.protocol.encode(&packet);
+        let data = self.protocol.encode(packet);
         addrs
             .into_iter()
             .map(|addr| self.socket.client(addr).unwrap().borrow_mut())

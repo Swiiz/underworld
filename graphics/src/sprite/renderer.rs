@@ -10,7 +10,7 @@ use crate::{
 };
 use wgpu::{util::StagingBelt, *};
 
-use super::{Atlas, Sprite, SpriteDrawParams, SpriteSheetsRegistry};
+use super::{build_atlas, Atlas, Sprite, SpriteDrawParams, SpriteSheetSource};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -41,10 +41,10 @@ pub struct SpriteRenderer {
 const MAX_SPRITES: u64 = 10_000;
 
 impl SpriteRenderer {
-    pub fn new(
+    pub fn new<'a>(
         ctx: &GraphicsCtx,
         window_size: impl Into<(u32, u32)>,
-        sprite_registry: &SpriteSheetsRegistry,
+        sprite_sheets: impl Iterator<Item = &'a SpriteSheetSource>,
     ) -> Self {
         let window_size = window_size.into();
         let (sprite_pipeline, texture_bind_group_layout) =
@@ -58,7 +58,7 @@ impl SpriteRenderer {
 
         let queue = Vec::with_capacity(MAX_SPRITES as usize);
 
-        let atlas = sprite_registry.build_atlas(ctx, &texture_bind_group_layout);
+        let atlas = build_atlas(sprite_sheets, ctx, &texture_bind_group_layout);
 
         let proj_matrix = compute_proj_matrix(window_size);
 
@@ -105,7 +105,11 @@ impl RendererPart for SpriteRenderer {
     }
 
     fn submit(&mut self, rctx: &mut RenderCtx, gctx: &GraphicsCtx) {
-        let queue = std::mem::replace(&mut self.queue, Vec::with_capacity(MAX_SPRITES as usize));
+        let len = self.queue.len();
+        if len == 0 {
+            return;
+        }
+        let queue = std::mem::replace(&mut self.queue, Vec::with_capacity(len));
 
         let rawqueue = cast_slice(&queue);
 

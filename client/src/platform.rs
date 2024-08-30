@@ -1,5 +1,7 @@
-use winit::application::ApplicationHandler;
+use std::sync::Arc;
+
 use winit::window::{Window, WindowId};
+use winit::{application::ApplicationHandler, window::WindowAttributes};
 use winit::{
     event::{ElementState, WindowEvent},
     keyboard::KeyCode,
@@ -9,17 +11,24 @@ use winit::{
     keyboard::PhysicalKey,
 };
 
-pub struct Platform<T: AppLayer> {
-    app: Option<T>,
+pub enum Platform<T: AppLayer> {
+    Init(T::Config),
+    Paused,
+    Running(T),
 }
 
 impl<T: AppLayer> ApplicationHandler for Platform<T> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.app = Some(T::new(event_loop));
+        match std::mem::replace(self, Platform::Paused) {
+            Platform::Init(config) => {
+                *self = Platform::Running(T::new(PlatformHandle(event_loop), config));
+            }
+            _ => {}
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
-        let Some(app) = &mut self.app else {
+        let Platform::Running(app) = self else {
             return;
         };
 
@@ -75,7 +84,7 @@ impl<T: AppLayer> ApplicationHandler for Platform<T> {
     }
 
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
-        let Some(app) = &mut self.app else {
+        let Platform::Running(app) = self else {
             return;
         };
 
@@ -83,7 +92,7 @@ impl<T: AppLayer> ApplicationHandler for Platform<T> {
     }
 
     fn exiting(&mut self, _: &ActiveEventLoop) {
-        let Some(app) = &mut self.app else {
+        let Platform::Running(app) = self else {
             return;
         };
 
@@ -97,8 +106,17 @@ pub enum PlatformInput {
     MouseScrolled { x: f32, y: f32 },
 }
 
+pub struct PlatformHandle<'a>(&'a ActiveEventLoop);
+
+impl PlatformHandle<'_> {
+    pub fn create_window(&self, attrs: WindowAttributes) -> Arc<Window> {
+        Arc::new(self.0.create_window(Window::default_attributes()).unwrap())
+    }
+}
+
 pub trait AppLayer {
-    fn new(event_loop: &ActiveEventLoop) -> Self;
+    type Config;
+    fn new(handle: PlatformHandle, config: Self::Config) -> Self;
     fn render(&mut self, _: WindowId) {}
     fn update(&mut self) {}
     fn input(&mut self, _: WindowId, _: PlatformInput) {}
@@ -107,12 +125,12 @@ pub trait AppLayer {
     fn windows(&self) -> Vec<&Window>;
 }
 
-pub fn run_app<T: AppLayer>() {
+pub fn run_app<T: AppLayer>(config: T::Config) {
     let event_loop = EventLoop::new().unwrap();
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = Platform::<T> { app: None };
+    let mut app = Platform::<T>::Init(config);
     if let Err(e) = event_loop.run_app(&mut app) {
         panic!("{e:?}");
     }

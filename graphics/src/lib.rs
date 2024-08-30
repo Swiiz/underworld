@@ -7,6 +7,8 @@ pub mod renderer;
 pub mod sprite;
 
 pub use cgmath as maths;
+use sprite::{renderer::SpriteRenderer, SpriteSheetSource};
+use wgpu::SurfaceTarget;
 
 pub struct Graphics {
     pub ctx: GraphicsCtx<'static>,
@@ -14,6 +16,21 @@ pub struct Graphics {
 }
 
 impl Graphics {
+    pub fn new<'a>(
+        window_size: impl Into<(u32, u32)>,
+        target: impl Into<SurfaceTarget<'static>>,
+        textures: impl Iterator<Item = &'a SpriteSheetSource>,
+    ) -> Self {
+        let window_size = window_size.into();
+        let ctx = GraphicsCtx::new(window_size, target);
+        Self {
+            renderer: Renderer {
+                sprites: SpriteRenderer::new(&ctx, window_size, textures),
+            },
+            ctx,
+        }
+    }
+
     pub fn resize(&mut self, window_size: impl Into<(u32, u32)>) {
         let window_size = window_size.into();
         self.ctx.resize(window_size);
@@ -22,7 +39,7 @@ impl Graphics {
         }
     }
 
-    pub fn render(&mut self, renderfunc: impl Fn(&mut Frame)) {
+    pub fn render(&mut self, mut renderfunc: impl FnMut(&mut Frame)) {
         if let Some(mut frame) = self.ctx.next_frame(&mut self.renderer) {
             renderfunc(&mut frame);
             frame.present();

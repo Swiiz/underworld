@@ -1,29 +1,20 @@
 use std::sync::Arc;
 
-use assets::Assets;
+use assets::ClientAssets;
 use camera::Camera;
-use cgmath::{Array, Vector2, Zero};
-use common::{core::spatial::Position, utils::timer::Timer};
 use common::{
-    tilemap::{tile::Tile, TileMap},
-    utils::registry::Registry,
+    network::proto::login::{ClientboundLoginSuccess, ServerboundLoginStart},
+    state::CommonState,
+    utils::timer::Timer,
 };
-use ecs::{Entities, Entity, EntityId};
-use graphics::{
-    ctx::GraphicsCtx,
-    renderer::Renderer,
-    sprite::{renderer::SpriteRenderer, Sprite, SpriteDrawParams},
-    Graphics,
-};
+use ecs::Entities;
+use graphics::Graphics;
 use network::NetworkClient;
-use platform::{AppLayer, PlatformInput};
+use platform::{AppLayer, PlatformHandle, PlatformInput};
 use player::PlayerController;
-use rendering::{draw_entities, RenderData};
-use tilemap::{ClientTile, ClientTileMap, ClientTileRegistry};
-use winit::{
-    event_loop::ActiveEventLoop,
-    window::{Window, WindowId},
-};
+use state::ClientState;
+use uflow::SendMode;
+use winit::window::{Window, WindowAttributes, WindowId};
 
 pub mod assets;
 pub mod camera;
@@ -31,131 +22,103 @@ pub mod network;
 pub mod platform;
 pub mod player;
 pub mod rendering;
+pub mod state;
 pub mod tilemap;
 
 pub struct GameClient {
+    config: GameClientConfig,
     window: Arc<Window>,
     graphics: Graphics,
-    assets: Assets,
+    assets: ClientAssets,
     timer: Timer,
-
     network: NetworkClient,
 
-    camera: Camera,
-    player_entity: EntityId,
-    controller: PlayerController,
+    state: ClientState,
+}
 
-    tiles: ClientTileRegistry,
-    terrain: ClientTileMap,
-    entities: Entities,
+pub struct GameClientConfig {
+    pub username: String,
+}
+
+impl GameClientConfig {
+    pub fn default() -> Self {
+        Self {
+            username: "Noobie".to_string(),
+        }
+    }
 }
 
 impl AppLayer for GameClient {
-    fn new(event_loop: &ActiveEventLoop) -> Self {
+    type Config = GameClientConfig;
+    fn new(platform: PlatformHandle, config: Self::Config) -> Self {
         let timer = Timer::new();
-
-        let window = Arc::new(
-            event_loop
-                .create_window(Window::default_attributes())
-                .unwrap(),
+        let window =
+            platform.create_window(WindowAttributes::default().with_title("Underworld Client"));
+        let assets = ClientAssets::load();
+        let graphics = Graphics::new(window.inner_size(), window.clone(), assets.textures.iter());
+        let mut network = NetworkClient::connect_to("127.0.0.1:8888");
+        network.send(
+            &ServerboundLoginStart {
+                username: config.username.clone(),
+            },
+            SendMode::Reliable,
         );
-
-        let ctx = GraphicsCtx::new(window.inner_size(), window.clone());
-        let (assets, sprite_sheets_registry) = Assets::load();
-        let graphics = Graphics {
-            renderer: Renderer {
-                sprites: SpriteRenderer::new(&ctx, window.inner_size(), &sprite_sheets_registry),
-            },
-            ctx,
-        };
-
-        let server_address = "127.0.0.1:8888";
-        let network = NetworkClient::new(server_address);
-
-        let camera = Camera::new();
-        let controller = PlayerController::default();
-
-        let mut tiles = Registry::new();
-
-        let debug_tile = tiles.register(ClientTile {
-            sprite: Sprite {
-                pos: Vector2::zero(),
-                sheet: assets.get_texture("debug"),
-                size: Vector2::from_value(1),
-            },
-            common: Tile::default(),
-        });
-
-        let terrain = ClientTileMap::new(TileMap::new(Vector2::new(16, 16), debug_tile));
-
-        let mut entities = Entities::new();
-
-        let player_entity = entities
-            .spawn()
-            .set(Position(Vector2::zero()))
-            .set(RenderData::new().with(
-                Sprite {
-                    pos: Vector2::zero(),
-                    sheet: assets.get_texture("characters"),
-                    size: Vector2::from_value(1),
-                },
-                SpriteDrawParams {
-                    ..Default::default()
-                },
-            ))
-            .id();
+        let state = ClientState::Connecting;
 
         Self {
+            config,
             window,
             graphics,
             assets,
             network,
             timer,
-            camera,
-            controller,
-            player_entity,
-            tiles,
-            terrain,
-            entities,
+            state,
         }
     }
 
     fn render(&mut self, _: WindowId) {
         let _dt = self.timer.render_dt();
 
-        if let Some(player) = self.entities.get(&self.player_entity) {
-            self.camera.pos = player.get::<Position>().unwrap().0;
-        }
+        self.state.update_camera_pos();
 
         self.graphics.render(|mut frame| {
-            self.terrain
-                .render(&mut frame, &self.assets, &self.tiles, &self.camera);
-
-            draw_entities(&self.entities, &mut frame, &self.camera);
+            self.state.render(&mut frame, &self.assets);
         });
     }
 
     fn update(&mut self) {
         let dt = self.timer.update_dt();
 
-        self.network.handle_packets(|packet| {
-            // handle packets
+        self.network.handle_packets(|packet| match self.state {
+            ClientState::Connecting => {
+                if let Some(ClientboundLoginSuccess { ecs_state }) = packet.try_decode() {
+                    println!("Successfully logged in!");
+
+                    self.state = ClientState::Connected {
+                        camera: Camera::new(),
+                        controller: PlayerController::default(),
+                        common: CommonState {
+                            //terrain: ,
+                            entities: Entities::load(ecs_state),
+                        },
+                    };
+                }
+            }
+            _ => unimplemented!(),
         });
 
         // Send data, update client application state
         // ...
 
-        if let Some(player) = self.entities.get(&self.player_entity) {
-            self.controller.update_entity(&player, dt);
-        }
+        self.state.update_player(dt);
+        self.state.update_world(dt);
 
         self.network.flush();
     }
 
     fn input(&mut self, _: WindowId, event: PlatformInput) {
-        self.terrain.input(&event, self.window.inner_size());
-        self.controller.handle_platform_input(&event);
-        self.camera.handle_scroll(&event);
+        //TODO: move state input into here
+        self.state.input(&event, self.window.inner_size());
     }
 
     fn exit(&mut self) {

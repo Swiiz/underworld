@@ -18,7 +18,7 @@ pub struct Atlas {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct SpriteSheetData {
+pub struct SpriteSheetSource {
     pub path: String,
     pub sprite_px_size: Vector2<u32>,
 }
@@ -55,10 +55,20 @@ impl SpriteSheet {
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
 pub struct SpriteSheetHandle(usize);
+impl From<usize> for SpriteSheetHandle {
+    fn from(id: usize) -> Self {
+        Self(id)
+    }
+}
+impl Into<usize> for SpriteSheetHandle {
+    fn into(self) -> usize {
+        self.0
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-pub struct Sprite {
-    pub sheet: SpriteSheetHandle,
+pub struct Sprite<T = SpriteSheetHandle> {
+    pub sheet: T,
     pub pos: Vector2<u32>,
     pub size: Vector2<u32>,
 }
@@ -80,78 +90,68 @@ impl Default for SpriteDrawParams {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct SpriteSheetsRegistry {
-    to_load: Vec<SpriteSheetData>,
-}
+pub(super) fn build_atlas<'a>(
+    sources: impl Iterator<Item = &'a SpriteSheetSource>,
+    ctx: &GraphicsCtx,
+    texture_bind_group_layout: &BindGroupLayout,
+) -> Atlas {
+    let mut packer = TexturePacker::new_skyline(TexturePackerConfig {
+        max_width: 4096,
+        max_height: 4096,
+        texture_padding: 0,
+        trim: false,
+        allow_rotation: false,
+        ..Default::default()
+    });
 
-impl SpriteSheetsRegistry {
-    pub fn push(&mut self, spritesheet_data: SpriteSheetData) -> SpriteSheetHandle {
-        self.to_load.push(spritesheet_data);
-        SpriteSheetHandle(self.to_load.len() - 1)
-    }
+    let sources = sources.collect::<Vec<_>>();
 
-    pub(super) fn build_atlas(
-        &self,
-        ctx: &GraphicsCtx,
-        texture_bind_group_layout: &BindGroupLayout,
-    ) -> Atlas {
-        let mut packer = TexturePacker::new_skyline(TexturePackerConfig {
-            max_width: 4096,
-            max_height: 4096,
-            texture_padding: 0,
-            trim: false,
-            allow_rotation: false,
-            ..Default::default()
+    let images = sources.iter().enumerate().map(|(k, ssd)| {
+        (
+            k,
+            ImageImporter::import_from_file(Path::new(&ssd.path)).unwrap_or_else(|e| {
+                panic!("Unable to load sprite(sheet) at {} ! error: {e}", ssd.path)
+            }),
+        )
+    });
+
+    images.for_each(|(k, img)| {
+        packer
+            .pack_own(k, img)
+            .expect("Failed to pack sprite(sheet) into global atlas!")
+    });
+
+    let mut sheets = vec![None; sources.len()];
+
+    packer.get_frames().into_iter().for_each(|(k, sheet)| {
+        sheets[*k] = Some(SpriteSheet {
+            size_px: Vector2 {
+                x: sheet.frame.w,
+                y: sheet.frame.h,
+            },
+            sprite_size_px: sources.get(*k).unwrap().sprite_px_size,
+            tex_coords: Vector2 {
+                x: sheet.frame.x as f32 / packer.width() as f32,
+                y: sheet.frame.y as f32 / packer.height() as f32,
+            },
+            tex_dims: Vector2 {
+                x: sheet.frame.w as f32 / packer.width() as f32,
+                y: sheet.frame.h as f32 / packer.height() as f32,
+            },
         });
+    });
 
-        let images = self.to_load.iter().enumerate().map(|(k, ssd)| {
-            (
-                k,
-                ImageImporter::import_from_file(Path::new(&ssd.path)).unwrap_or_else(|e| {
-                    panic!("Unable to load sprite(sheet) at {} ! error: {e}", ssd.path)
-                }),
-            )
-        });
+    let sheets = sheets.into_iter().map(|s| s.unwrap()).collect();
 
-        images.for_each(|(k, img)| {
-            packer
-                .pack_own(k, img)
-                .expect("Failed to pack sprite(sheet) into global atlas!")
-        });
+    let image = ImageExporter::export(&packer)
+        .expect("An error occured while exporting global atlas!")
+        .to_rgba8();
+    let size: Vector2<u32> = image.dimensions().into();
 
-        let mut sheets = vec![None; self.to_load.len()];
+    let (_texture, bind_group) =
+        create_texture(ctx, size, image.into_vec(), texture_bind_group_layout);
 
-        packer.get_frames().into_iter().for_each(|(k, sheet)| {
-            sheets[*k] = Some(SpriteSheet {
-                size_px: Vector2 {
-                    x: sheet.frame.w,
-                    y: sheet.frame.h,
-                },
-                sprite_size_px: self.to_load.get(*k).unwrap().sprite_px_size,
-                tex_coords: Vector2 {
-                    x: sheet.frame.x as f32 / packer.width() as f32,
-                    y: sheet.frame.y as f32 / packer.height() as f32,
-                },
-                tex_dims: Vector2 {
-                    x: sheet.frame.w as f32 / packer.width() as f32,
-                    y: sheet.frame.h as f32 / packer.height() as f32,
-                },
-            });
-        });
-
-        let sheets = sheets.into_iter().map(|s| s.unwrap()).collect();
-
-        let image = ImageExporter::export(&packer)
-            .expect("An error occured while exporting global atlas!")
-            .to_rgba8();
-        let size: Vector2<u32> = image.dimensions().into();
-
-        let (_texture, bind_group) =
-            create_texture(ctx, size, image.into_vec(), texture_bind_group_layout);
-
-        Atlas { sheets, bind_group }
-    }
+    Atlas { sheets, bind_group }
 }
 
 fn create_texture(

@@ -45,7 +45,7 @@ impl Protocol {
         }
     }
 
-    fn with_packet<T: 'static>(mut self) -> Self {
+    fn add_packet<T: 'static>(&mut self) -> &mut Self {
         let tid = TypeId::of::<T>();
         if self.packets.contains_left(&tid) {
             panic!("Packet already exists");
@@ -55,11 +55,8 @@ impl Protocol {
         self
     }
 
-    pub fn id_of<T: 'static>(&self) -> PacketId {
-        self.packets
-            .get_by_left(&TypeId::of::<T>())
-            .unwrap_or_else(|| panic!("Packet not registered"))
-            .clone()
+    pub fn id_of<T: 'static>(&self) -> Option<u16> {
+        self.packets.get_by_left(&TypeId::of::<T>()).copied()
     }
 
     pub fn type_id_of(&self, id: PacketId) -> TypeId {
@@ -72,7 +69,12 @@ impl Protocol {
     pub fn encode<T: Serialize + 'static>(&self, data: &T) -> Box<[u8]> {
         let data_bin = bincode::serialize(data).expect("Failed to serialize data");
         bincode::serialize(&RawPacket {
-            id: self.id_of::<T>(),
+            id: self.id_of::<T>().unwrap_or_else(|| {
+                panic!(
+                    "Tried to encode unknown packet: {}, include it in the protocol",
+                    std::any::type_name::<T>()
+                )
+            }),
             data: data_bin.into(),
         })
         .expect("Failed to encode packet")
