@@ -2,7 +2,6 @@ use client::{GameClient, GameClientConfig};
 
 fn main() {
     std::env::set_var("RUST_BACKTRACE", "1");
-
     let mut config = GameClientConfig::default();
 
     let args = std::env::args();
@@ -19,5 +18,6 @@ fn main() {
         config.username = buff.trim().to_string();
     }
 
+    common::logger::init_logger();
     client::platform::run_app::<GameClient>(config);
 }

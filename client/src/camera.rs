@@ -15,7 +15,7 @@ impl Camera {
         }
     }
 
-    pub fn handle_scroll(&mut self, event: &PlatformInput) {
+    pub fn handle_input(&mut self, event: &PlatformInput) {
         let PlatformInput::MouseScrolled { y, .. } = event else {
             return;
         };

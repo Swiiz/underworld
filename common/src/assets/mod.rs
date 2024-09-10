@@ -1,5 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use log::debug;
+
 use crate::{tilemap::tile::Tile, utils::registry::Registry};
 
 pub struct CommonAssets {
@@ -36,7 +38,7 @@ fn load_tiles() -> Registry<Tile> {
         )
     })
     .for_each(|(k, v)| {
-        println!("Registering tile: {}", k);
+        debug!("Registering tile: {}", k);
         tiles.register(k, v);
     });
 

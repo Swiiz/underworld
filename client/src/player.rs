@@ -1,6 +1,8 @@
-use crate::{platform::PlatformInput, rendering::RenderData};
+use crate::{network::NetworkClient, platform::PlatformInput, rendering::RenderData};
 use cgmath::{InnerSpace, Vector2, Zero};
-use common::{core::spatial::Position, utils::maths::MaybeNan};
+use common::{
+    core::spatial::Position, network::proto::play::ServerboundSetPlayerPos, utils::maths::MaybeNan,
+};
 use ecs::Entity;
 use winit::{event::ElementState, keyboard::KeyCode};
 
@@ -26,7 +28,7 @@ impl Default for PlayerController {
 }
 
 impl PlayerController {
-    pub fn handle_platform_input(&mut self, input: &PlatformInput) {
+    pub fn handle_input(&mut self, input: &PlatformInput) {
         match self {
             PlayerController::Moving {
                 forward,
@@ -48,7 +50,7 @@ impl PlayerController {
         }
     }
 
-    pub fn update_entity(&self, entity: &impl Entity, dt: f32) {
+    pub fn move_player(&self, entity: &impl Entity, dt: f32, network: &mut NetworkClient) {
         match self {
             PlayerController::Moving {
                 forward,
@@ -82,6 +84,10 @@ impl PlayerController {
                 let speed = 5.0;
 
                 pos.0 += (dir.normalize() * dt * speed).no_nan();
+
+                if *forward || *backward || *left || *right {
+                    network.send(&ServerboundSetPlayerPos { pos: *pos });
+                }
             }
         }
     }

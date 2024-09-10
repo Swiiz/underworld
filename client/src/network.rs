@@ -1,55 +1,75 @@
-use std::net::ToSocketAddrs;
+use std::{
+    io::{ErrorKind, Write},
+    net::{TcpStream, ToSocketAddrs},
+};
 
-use common::network::{proto::network_protocol, AnyPacket, Protocol};
+use common::{
+    logger::{error, warn},
+    network::{proto::network_protocol, AnyPacket, Protocol},
+};
 use serde::Serialize;
-use uflow::{client::Client, SendMode};
 
 pub struct NetworkClient {
     protocol: Protocol,
-    socket: Client,
+    socket: TcpStream,
+    packet_queue: Vec<Box<[u8]>>,
 }
 
 impl NetworkClient {
     pub fn connect_to(address: impl ToSocketAddrs) -> Self {
+        let socket = TcpStream::connect(address).expect("Invalid address");
+        socket
+            .set_nonblocking(true)
+            .expect("Failed to set socket to non-blocking");
+
         Self {
-            socket: Client::connect(address, Default::default()).expect("Invalid address"),
+            socket,
             protocol: network_protocol(),
+            packet_queue: Vec::new(),
         }
     }
 
-    pub fn handle_packets(&mut self, mut handler: impl FnMut(AnyPacket)) {
-        for event in self.socket.step() {
-            match event {
-                uflow::client::Event::Connect => {
-                    println!("Connected to the server");
-                    // TODO: Handle connection
+    pub fn handle_packets(&mut self, mut handler: impl FnMut(&mut Self, AnyPacket)) {
+        loop {
+            match self.protocol.decode(&self.socket) {
+                Ok(packet) => {
+                    handler(self, packet);
                 }
-                uflow::client::Event::Disconnect => {
-                    println!("Disconnected from the server, you may close the window");
-                    // TODO: Handle disconnection
+                Err(common::network::ErrorKind::Io(e))
+                    if [ErrorKind::WouldBlock].contains(&e.kind()) =>
+                {
+                    break;
                 }
-                uflow::client::Event::Error(error) => {
-                    panic!("Fatal network error: {error:?}");
+                Err(common::network::ErrorKind::Io(e))
+                    if [
+                        ErrorKind::UnexpectedEof,
+                        ErrorKind::ConnectionReset,
+                        ErrorKind::ConnectionAborted,
+                        ErrorKind::ConnectionRefused,
+                    ]
+                    .contains(&e.kind()) =>
+                {
+                    error!("Client disconnected: {}", self.socket.peer_addr().unwrap());
+                    panic!("");
                 }
-                uflow::client::Event::Receive(packet_data) => {
-                    if let Some(p) = self.protocol.decode(&packet_data) {
-                        handler(p);
-                    }
+                Err(e) => {
+                    warn!("Failed to decode packet from client: {e:?}");
+                    continue;
                 }
             }
         }
     }
 
-    pub fn send<T: Serialize + 'static>(&mut self, packet: &T, mode: SendMode) {
-        self.socket.send(self.protocol.encode(packet), 0, mode);
+    pub fn send<T: Serialize + 'static>(&mut self, packet: &T) {
+        let data = self.protocol.encode(packet);
+        self.socket
+            .write_all(&data)
+            .unwrap_or_else(|e| warn!("Failed to write packet to client: {e:?}"));
     }
 
     pub fn flush(&mut self) {
-        self.socket.flush();
-    }
-
-    pub fn exit(&mut self) {
-        self.socket.disconnect_now();
-        let _ = self.socket.step();
+        self.socket
+            .flush()
+            .unwrap_or_else(|e| warn!("Failed to flush socket to server: {e:?}"));
     }
 }

@@ -2,21 +2,36 @@ pub mod assets;
 pub mod network;
 pub mod state;
 
+use std::{net::SocketAddr, time::Instant};
+
 use assets::ServerAssets;
+use cgmath::{Vector2, Zero};
 use common::{
-    network::proto::login::{ClientboundLoginSuccess, ServerboundLoginStart},
+    core::{spatial::Position, EntityKind},
+    logger::info,
+    network::proto::{
+        extra::{CommonPing, ServerboundDisconnect},
+        login::{ClientboundLoginSuccess, ServerboundLoginStart},
+        play::{ClientboundRemoveEntity, ClientboundSpawnEntity, ServerboundSetPlayerPos},
+        SyncComponentSelection,
+    },
     utils::timer::Timer,
 };
+use ecs::Entity;
 use network::{remote::NetRemoteClient, NetworkServer};
 use state::ServerState;
-use uflow::SendMode;
+
+pub const SERVER_UPS_CAP: f32 = 60.;
 
 pub fn run_server() {
     let mut server = GameServer::new();
 
     loop {
         server.update();
-        std::thread::sleep(std::time::Duration::from_secs_f32(1. / 60.));
+
+        std::time::Duration::from_secs_f32(1. / SERVER_UPS_CAP)
+            .checked_sub(server.timer.last_update.elapsed())
+            .map(|d| std::thread::sleep(d));
     }
 }
 
@@ -44,29 +59,83 @@ impl GameServer {
     }
 
     pub fn update(&mut self) {
-        let mut to_sync = Vec::new();
-        self.network
-            .handle_packets(|addr, client, packet| match client {
-                &mut NetRemoteClient::Connecting => {
-                    if let Some(ServerboundLoginStart { username }) = packet.try_decode() {
-                        println!("Client connected: {:?}", username);
-                        *client = NetRemoteClient::Online { username };
-                        to_sync.push(addr);
-                    }
-                }
-                NetRemoteClient::Online { .. } => {}
-            });
+        let _dt = self.timer.update_dt();
 
-        let full_sync_packet = ClientboundLoginSuccess {
-            ecs_state: self.state.common.entities.save(),
-        };
-        for addr in to_sync {
-            self.network
-                .send_to(&full_sync_packet, &[addr], SendMode::Reliable);
-        }
+        self.network.listen_for_connections();
+
+        self.network.handle_packets(|network, addr, packet| {
+            if let Some(CommonPing { time }) = packet.try_decode::<CommonPing>() {
+                if let Some(NetRemoteClient { last_packet, .. }) = network.get_remote_mut(&addr) {
+                    *last_packet = Instant::now();
+                    network.send_to([addr], &CommonPing { time });
+                }
+            }
+
+            if let Some(packet) = packet.try_decode::<ServerboundDisconnect>() {
+                info!("Client disconnected: {:?} for reason: {:?}", addr, packet);
+                network.disconnect(&addr);
+                return;
+            }
+
+            if network.is_connecting(&addr) {
+                if let Some(ServerboundLoginStart { username }) = packet.try_decode() {
+                    connect_player(network, addr, username, &mut self.state);
+                }
+            } else {
+                if let Some(ServerboundSetPlayerPos { pos }) = packet.try_decode() {
+                    self.state.set_player_position(&addr, pos, network);
+                }
+            }
+        });
+
+        self.network.handle_disconnections(|network, addr, client| {
+            info!("Client disconnected: {:?}", addr);
+
+            self.state
+                .common
+                .entities
+                .edit(client.entity)
+                .unwrap()
+                .despawn();
+            network.broadcast(&ClientboundRemoveEntity {
+                entity: client.entity.into(),
+            });
+        });
 
         // Send data, update server state
 
         self.network.flush();
     }
+}
+
+fn connect_player(
+    network: &mut NetworkServer,
+    addr: SocketAddr,
+    username: String,
+    state: &mut ServerState,
+) {
+    info!("Client connected: {:?}", username);
+
+    // Save the ecs state before spawning the player
+    let ecs_state = state.common.entities.save();
+
+    let client_entity = state
+        .common
+        .entities
+        .spawn()
+        .set(EntityKind::Player)
+        .set(Position(Vector2::zero()))
+        .id();
+
+    network.accept_connection(addr, NetRemoteClient::new(username, client_entity));
+
+    network.send_to([addr], &ClientboundLoginSuccess { ecs_state });
+
+    network.broadcast(&ClientboundSpawnEntity {
+        entity: client_entity.into(),
+        state: state
+            .common
+            .entities
+            .save_entity::<SyncComponentSelection>(client_entity),
+    });
 }

@@ -1,6 +1,6 @@
 use bimap::BiMap;
 use serde::{Deserialize, Serialize};
-use std::{any::TypeId, u16};
+use std::{any::TypeId, io::Read, u16};
 
 use serde::de::DeserializeOwned;
 
@@ -13,8 +13,8 @@ pub struct RawPacket {
 }
 
 pub struct AnyPacket {
-    type_id: TypeId,
-    data: Box<[u8]>,
+    pub type_id: TypeId,
+    pub data: Box<[u8]>,
 }
 
 impl AnyPacket {
@@ -66,7 +66,7 @@ impl Protocol {
             .clone()
     }
 
-    pub fn encode<T: Serialize + 'static>(&self, data: &T) -> Box<[u8]> {
+    pub fn encode<T: Serialize + 'static>(&self, data: &T) -> Vec<u8> {
         let data_bin = bincode::serialize(data).expect("Failed to serialize data");
         bincode::serialize(&RawPacket {
             id: self.id_of::<T>().unwrap_or_else(|| {
@@ -78,14 +78,15 @@ impl Protocol {
             data: data_bin.into(),
         })
         .expect("Failed to encode packet")
-        .into()
     }
 
-    pub fn decode(&self, bytes: &[u8]) -> Option<AnyPacket> {
-        let raw: RawPacket = bincode::deserialize(bytes).ok()?;
-        Some(AnyPacket {
+    pub fn decode(&self, stream: impl Read) -> Result<AnyPacket, ErrorKind> {
+        let raw: RawPacket = bincode::deserialize_from(stream).map_err(|e| *e)?;
+        Ok(AnyPacket {
             type_id: self.type_id_of(raw.id),
             data: raw.data,
         })
     }
 }
+
+pub use bincode::ErrorKind;

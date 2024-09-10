@@ -110,7 +110,7 @@ pub struct PlatformHandle<'a>(&'a ActiveEventLoop);
 
 impl PlatformHandle<'_> {
     pub fn create_window(&self, attrs: WindowAttributes) -> Arc<Window> {
-        Arc::new(self.0.create_window(Window::default_attributes()).unwrap())
+        Arc::new(self.0.create_window(attrs).unwrap())
     }
 }
 

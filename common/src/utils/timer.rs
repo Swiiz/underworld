@@ -1,9 +1,9 @@
 use std::time::Instant;
 
 pub struct Timer {
-    start: Instant,
-    last_update: Instant,
-    last_render: Instant,
+    pub start: Instant,
+    pub last_update: Instant,
+    pub last_render: Instant,
 }
 
 impl Timer {
@@ -21,6 +21,7 @@ impl Timer {
         e
     }
 
+    // Move into client?
     pub fn render_dt(&mut self) -> f32 {
         let e = self.last_render.elapsed().as_secs_f32();
         self.last_render = Instant::now();

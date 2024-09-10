@@ -4,3 +4,5 @@ pub mod network;
 pub mod state;
 pub mod tilemap;
 pub mod utils;
+
+pub mod logger;

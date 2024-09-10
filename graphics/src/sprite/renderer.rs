@@ -106,24 +106,23 @@ impl RendererPart for SpriteRenderer {
 
     fn submit(&mut self, rctx: &mut RenderCtx, gctx: &GraphicsCtx) {
         let len = self.queue.len();
-        if len == 0 {
-            return;
-        }
+
         let queue = std::mem::replace(&mut self.queue, Vec::with_capacity(len));
 
         let rawqueue = cast_slice(&queue);
 
-        self.sprite_staging_belt.recall();
-        {
-            let byte_size = (queue.len() * size_of::<SpriteInstance>()) as u64;
-            let mut bufmut = self.sprite_staging_belt.write_buffer(
-                &mut rctx.encoder,
-                &self.sprite_instance_buf,
-                0,
-                NonZeroU64::new(byte_size).unwrap(),
-                &gctx.device,
-            );
-            bufmut.clone_from_slice(rawqueue);
+        if len != 0 {
+            {
+                let byte_size = (queue.len() * size_of::<SpriteInstance>()) as u64;
+                let mut bufmut = self.sprite_staging_belt.write_buffer(
+                    &mut rctx.encoder,
+                    &self.sprite_instance_buf,
+                    0,
+                    NonZeroU64::new(byte_size).unwrap(),
+                    &gctx.device,
+                );
+                bufmut.clone_from_slice(rawqueue);
+            }
         }
         self.sprite_staging_belt.finish();
 
@@ -159,6 +158,10 @@ impl RendererPart for SpriteRenderer {
         render_pass.draw_indexed(0..6, 0, 0..queue.len() as u32);
 
         self.z_index = 0.000001 * (MAX_SPRITES + 1) as f32;
+    }
+
+    fn post_submit(&mut self) {
+        self.sprite_staging_belt.recall();
     }
 }
 

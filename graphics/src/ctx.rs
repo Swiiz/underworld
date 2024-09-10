@@ -127,6 +127,9 @@ impl<'a> Frame<'a> {
         self.ctx
             .queue
             .submit(std::iter::once(self.render.encoder.finish()));
+        for part in self.renderer.parts() {
+            part.post_submit();
+        }
         self.render.surface_texture.present();
     }
 }
