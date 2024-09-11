@@ -135,8 +135,8 @@ impl NetworkServer {
             .map(|(&addr, &(_, NetRemoteClient { last_packet, .. }))| (addr, last_packet))
             .collect::<Box<_>>()
         {
-            println!("Last packet: {:?}", last_packet.elapsed());
             if last_packet.elapsed() > self.timeout {
+                info!("Client {addr:?} timed out");
                 self.disconnect(addr);
             }
         }

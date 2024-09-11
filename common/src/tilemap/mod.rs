@@ -13,7 +13,7 @@ pub struct TileMap {
 }
 
 impl TileMap {
-    pub fn new(size: Vector2<i32>, background: RecordId) -> Self {
+    pub fn generate(size: Vector2<i32>, background: RecordId) -> Self {
         let chunk_size = size.zip(CHUNK_SIZE, |i, j| i / j);
         let mut chunks = HashMap::with_capacity((chunk_size.x * chunk_size.y) as usize);
         let (xstart, ystart) = (-chunk_size.x / 2, -chunk_size.y / 2);

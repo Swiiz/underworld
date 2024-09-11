@@ -10,5 +10,9 @@
     "tilemap_overlay": {
         "path": "tilemap_overlay.png",
         "sprite_px_size": [16, 16]  
+    },
+    "grass": {
+        "path": "grass.png",
+        "sprite_px_size": [16, 16]
     }
 }

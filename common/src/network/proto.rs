@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 
 pub mod login {
 
+    use crate::tilemap::TileMap;
+
     use super::*;
 
     #[derive(Serialize, Deserialize)]
@@ -22,6 +24,7 @@ pub mod login {
     #[derive(Serialize, Deserialize)]
     pub struct ClientboundLoginSuccess {
         pub ecs_state: EcsState<SyncComponentSelection>,
+        pub terrain: TileMap,
     }
 
     pub fn login_protocol(proto: &mut Protocol) {

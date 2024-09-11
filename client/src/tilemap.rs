@@ -111,7 +111,7 @@ fn render_chunk(
             frame.renderer.sprites.draw(
                 tile.sprite,
                 SpriteDrawParams {
-                    transform: camera.view_transform() // Wtf?
+                    transform: camera.view_transform()
                         * Matrix3::from_translation(coords.map(|i| i as f32))
                         * Matrix3::from_translation(Vector2::from_value(-0.5)), // center
                     ..Default::default()

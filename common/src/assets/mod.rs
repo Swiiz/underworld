@@ -21,7 +21,7 @@ fn load_tiles() -> Registry<Tile> {
 
     let base_path = PathBuf::from("assets/terrain/");
 
-    serde_json::from_str::<HashMap<String, HashMap<String, serde_json::Value>>>(
+    let mut entries = serde_json::from_str::<HashMap<String, HashMap<String, serde_json::Value>>>(
         std::fs::read_to_string(base_path.join("tiles.json"))
             .unwrap()
             .as_str(),
@@ -37,11 +37,15 @@ fn load_tiles() -> Registry<Tile> {
             serde_json::from_value::<Tile>(v).expect("Failed to parse common tile"),
         )
     })
-    .for_each(|(k, v)| {
-        debug!("Registering tile: {}", k);
-        tiles.register(k, v);
-    });
+    .collect::<Box<_>>();
+
+    // REALY IMPORTANT TO ENSURE TILES ARE ORDERED THE SAME WAY CLIENTSIDE AND SERVERSIDE
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (k, v) in entries {
+        let id = tiles.register(k.clone(), v);
+        debug!("Registered tile: [k: {}, id: {:?}]", k, id);
+    }
 
     tiles
 }
-// ClientTileData<StaticHandle>>

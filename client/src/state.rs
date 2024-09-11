@@ -1,12 +1,12 @@
 use std::cell::OnceCell;
 
-use common::{core::spatial::Position, logger::debug, state::CommonState};
-use ecs::{Entity, EntityId};
+use common::{core::spatial::Position, logger::debug, tilemap::TileMap};
+use ecs::{Entities, Entity, EntityId};
 use graphics::ctx::Frame;
 
 use crate::{
     assets::ClientAssets, camera::Camera, network::NetworkClient, platform::PlatformInput,
-    player::PlayerController, rendering::draw_entities,
+    player::PlayerController, rendering::draw_entities, tilemap::ClientTileMap,
 };
 
 pub enum ClientState {
@@ -16,7 +16,8 @@ pub enum ClientState {
         camera: Camera,
         controller: PlayerController,
 
-        common: CommonState,
+        terrain: ClientTileMap,
+        entities: Entities,
     },
 }
 
@@ -25,12 +26,12 @@ impl ClientState {
         match self {
             ClientState::Connecting => {}
             ClientState::Connected {
-                common,
                 controller,
                 player_entity,
+                entities,
                 ..
             } => {
-                if let Some(player) = common.entities.edit(*player_entity.get().unwrap()) {
+                if let Some(player) = entities.edit(*player_entity.get().unwrap()) {
                     controller.move_player(&player, dt, network);
                 }
             }
@@ -40,10 +41,14 @@ impl ClientState {
     pub fn render(&self, frame: &mut Frame, assets: &ClientAssets) {
         match self {
             ClientState::Connecting => {}
-            ClientState::Connected { camera, common, .. } => {
-                //self.terrain.render(frame, assets, &self.camera);
-
-                draw_entities(&common.entities, frame, camera);
+            ClientState::Connected {
+                camera,
+                entities,
+                terrain,
+                ..
+            } => {
+                terrain.render(frame, assets, camera);
+                draw_entities(entities, frame, camera);
             }
         }
     }
@@ -53,11 +58,11 @@ impl ClientState {
             ClientState::Connecting => {}
             ClientState::Connected {
                 camera,
-                common,
                 player_entity,
+                entities,
                 ..
             } => {
-                if let Some(player) = common.entities.edit(*player_entity.get().unwrap()) {
+                if let Some(player) = entities.edit(*player_entity.get().unwrap()) {
                     camera.pos = player.get::<Position>().unwrap().0;
                 }
             }
@@ -65,14 +70,17 @@ impl ClientState {
     }
 
     pub fn input(&mut self, event: &PlatformInput, window_size: impl Into<(u32, u32)>) {
-        //self.terrain.input(&event, window_size);
         match self {
             ClientState::Connecting => {}
             ClientState::Connected {
-                controller, camera, ..
+                controller,
+                camera,
+                terrain,
+                ..
             } => {
                 controller.handle_input(event);
                 camera.handle_input(event);
+                terrain.input(&event, window_size);
             }
         }
     }
@@ -80,8 +88,8 @@ impl ClientState {
     pub fn set_entity_position(&mut self, entity: EntityId, pos: Position) {
         match self {
             ClientState::Connecting => {}
-            ClientState::Connected { common, .. } => {
-                if let Some(mut e) = common.entities.edit(entity) {
+            ClientState::Connected { entities, .. } => {
+                if let Some(mut e) = entities.edit(entity) {
                     e.set(pos);
                 }
             }

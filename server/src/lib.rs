@@ -91,12 +91,7 @@ impl GameServer {
         self.network.handle_disconnections(|network, addr, client| {
             info!("Client disconnected: {:?}", addr);
 
-            self.state
-                .common
-                .entities
-                .edit(client.entity)
-                .unwrap()
-                .despawn();
+            self.state.entities.edit(client.entity).unwrap().despawn();
             network.broadcast(&ClientboundRemoveEntity {
                 entity: client.entity.into(),
             });
@@ -117,10 +112,10 @@ fn connect_player(
     info!("Client connected: {:?}", username);
 
     // Save the ecs state before spawning the player
-    let ecs_state = state.common.entities.save();
+    let ecs_state = state.entities.save();
+    let terrain = state.terrain.clone();
 
     let client_entity = state
-        .common
         .entities
         .spawn()
         .set(EntityKind::Player)
@@ -129,12 +124,11 @@ fn connect_player(
 
     network.accept_connection(addr, NetRemoteClient::new(username, client_entity));
 
-    network.send_to([addr], &ClientboundLoginSuccess { ecs_state });
+    network.send_to([addr], &ClientboundLoginSuccess { terrain, ecs_state });
 
     network.broadcast(&ClientboundSpawnEntity {
         entity: client_entity.into(),
         state: state
-            .common
             .entities
             .save_entity::<SyncComponentSelection>(client_entity),
     });

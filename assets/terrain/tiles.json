@@ -8,7 +8,19 @@
       }
     },
     "@common": {
-      "_": "_"
+      
+    }
+  },
+  "grass":  {
+    "@client": {
+      "sprite": {
+       "pos": [0, 0],
+       "sheet": "grass",
+       "size": [1, 1]
+      }
+    },
+    "@common": {
+      
     }
   }
 }

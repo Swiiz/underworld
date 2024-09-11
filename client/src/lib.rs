@@ -12,7 +12,6 @@ use common::{
         play::{ClientboundRemoveEntity, ClientboundSetEntityPosition, ClientboundSpawnEntity},
         SyncComponentSelection,
     },
-    state::CommonState,
     utils::timer::Timer,
 };
 use ecs::{Entities, Entity, EntityHandle, Query};
@@ -25,6 +24,7 @@ use platform::{AppLayer, PlatformHandle, PlatformInput};
 use player::PlayerController;
 use rendering::RenderData;
 use state::ClientState;
+use tilemap::ClientTileMap;
 use winit::window::{Window, WindowAttributes, WindowId};
 
 pub mod assets;
@@ -109,7 +109,9 @@ impl AppLayer for GameClient {
 
             match &mut self.state {
                 ClientState::Connecting => {
-                    if let Some(ClientboundLoginSuccess { ecs_state }) = packet.try_decode() {
+                    if let Some(ClientboundLoginSuccess { terrain, ecs_state }) =
+                        packet.try_decode()
+                    {
                         info!("Successfully logged in!");
 
                         let mut entities = Entities::load(ecs_state);
@@ -119,22 +121,19 @@ impl AppLayer for GameClient {
                             player_entity: OnceCell::new(),
                             camera: Camera::new(),
                             controller: PlayerController::default(),
-                            common: CommonState {
-                                //terrain: ,
-                                entities,
-                            },
+                            terrain: ClientTileMap::new(terrain),
+                            entities,
                         };
                     }
                 }
                 ClientState::Connected {
                     player_entity,
-                    common,
+                    entities,
                     ..
                 } => {
                     if let Some(ClientboundSpawnEntity { entity, state }) = packet.try_decode() {
-                        let mut entity = common
-                            .entities
-                            .load_entity::<SyncComponentSelection>(entity, state);
+                        let mut entity =
+                            entities.load_entity::<SyncComponentSelection>(entity, state);
 
                         load_entity_textures(&mut entity, &self.assets);
 
@@ -143,12 +142,10 @@ impl AppLayer for GameClient {
                     } else if let Some(ClientboundSetEntityPosition { entity, pos }) =
                         packet.try_decode()
                     {
-                        let eid = entity.validate(&common.entities);
+                        let eid = entity.validate(&entities);
                         self.state.set_entity_position(eid, pos);
                     } else if let Some(ClientboundRemoveEntity { entity }) = packet.try_decode() {
-                        if let Some(mut entity) =
-                            common.entities.edit(entity.validate(&common.entities))
-                        {
+                        if let Some(mut entity) = entities.edit(entity.validate(&entities)) {
                             entity.despawn();
                         } else {
                             warn!("Received entity despawn packet but entity was not found");
