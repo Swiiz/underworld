@@ -12,7 +12,6 @@ use serde::Serialize;
 pub struct NetworkClient {
     protocol: Protocol,
     socket: TcpStream,
-    packet_queue: Vec<Box<[u8]>>,
 }
 
 impl NetworkClient {
@@ -25,7 +24,6 @@ impl NetworkClient {
         Self {
             socket,
             protocol: network_protocol(),
-            packet_queue: Vec::new(),
         }
     }
 

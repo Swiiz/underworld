@@ -92,33 +92,33 @@ impl NetworkServer {
                         }
                         r => Some(r),
                     })
-                    .collect::<Box<_>>(),
+                    .collect::<Result<Box<_>, common::network::ErrorKind>>(),
                     *addr,
                 )
             })
             .collect::<Box<_>>();
 
-        'clients: for (packets, addr) in incoming {
-            'packets: for packet in packets {
-                match packet {
-                    Err(common::network::ErrorKind::Io(e))
-                        if [
-                            ErrorKind::ConnectionAborted,
-                            ErrorKind::ConnectionReset,
-                            ErrorKind::ConnectionRefused,
-                            ErrorKind::UnexpectedEof,
-                        ]
-                        .contains(&e.kind()) =>
-                    {
-                        warn!("Client disconnected: {:?}", addr);
-                        self.disconnect(&addr);
-                        continue 'clients;
+        for (packets, addr) in incoming {
+            match packets {
+                Err(common::network::ErrorKind::Io(e))
+                    if [
+                        ErrorKind::ConnectionAborted,
+                        ErrorKind::ConnectionReset,
+                        ErrorKind::ConnectionRefused,
+                        ErrorKind::UnexpectedEof,
+                    ]
+                    .contains(&e.kind()) =>
+                {
+                    warn!("Client disconnected: {:?}", addr);
+                    self.disconnect(&addr);
+                }
+                Err(e) => {
+                    warn!("Failed to decode packets from client: {e:?}");
+                }
+                Ok(packets) => {
+                    for packet in packets {
+                        handler(self, addr, packet);
                     }
-                    Err(e) => {
-                        warn!("Failed to decode packet from client: {e:?}");
-                        continue 'packets;
-                    }
-                    Ok(packet) => handler(self, addr, packet),
                 }
             }
         }
