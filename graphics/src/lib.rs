@@ -5,9 +5,11 @@ pub mod color;
 pub mod ctx;
 pub mod renderer;
 pub mod sprite;
+pub mod text;
 
 pub use cgmath as maths;
-use sprite::{renderer::SpriteRenderer, SpriteSheetSource};
+use sprite::{renderer::SpriteRendererPart, SpriteSheetSource};
+use text::renderer::TextRendererPart;
 use wgpu::SurfaceTarget;
 
 pub struct Graphics {
@@ -25,7 +27,8 @@ impl Graphics {
         let ctx = GraphicsCtx::new(window_size, target);
         Self {
             renderer: Renderer {
-                sprites: SpriteRenderer::new(&ctx, window_size, textures),
+                sprites: SpriteRendererPart::new(&ctx, window_size, textures),
+                text: TextRendererPart::new(&ctx, window_size),
             },
             ctx,
         }

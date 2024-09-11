@@ -9,10 +9,11 @@ edition = "2021"
 
 downcast-rs = "1.2.0"
 pollster = "0.3.0"
-wgpu = "0.19.1"
+wgpu = "22.1.0"
 texture_packer = { version = "0.27.0", default-features = false, features = [
     "png",
 ]}
 cgmath = { version = "0.18.0", features = ["serde"]}
 serde = { version = "1.0.197", features = ["derive"] }
 bytemuck = { version = "1.14.3", features = ["derive"] }
+wgpu_text = "0.9.0"

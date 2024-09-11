@@ -36,6 +36,12 @@ impl Into<[f32; 3]> for Color3 {
     }
 }
 
+impl Into<[f32; 4]> for Color3 {
+    fn into(self) -> [f32; 4] {
+        [self.r, self.g, self.b, 1.]
+    }
+}
+
 impl Color3 {
     pub const WHITE: Self = Self::gray(1.0);
     pub const BLACK: Self = Self::gray(0.0);

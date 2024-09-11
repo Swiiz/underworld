@@ -1,6 +1,6 @@
 use wgpu::*;
 
-use crate::renderer::Renderer;
+use crate::{color::Color3, renderer::Renderer};
 
 pub struct GraphicsCtx<'w> {
     pub(crate) device: Device,
@@ -8,6 +8,10 @@ pub struct GraphicsCtx<'w> {
     pub(super) surface: Surface<'w>,
     pub(super) surface_texture_format: TextureFormat,
     pub(super) surface_capabilities: SurfaceCapabilities,
+
+    depth_texture: Texture,
+    depth_texture_view: TextureView,
+    depth_texture_sampler: Sampler,
 }
 
 pub struct RenderCtx {
@@ -38,6 +42,7 @@ impl<'w> GraphicsCtx<'w> {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
             },
             None,
         ))
@@ -51,12 +56,18 @@ impl<'w> GraphicsCtx<'w> {
             .find(|f| f.is_srgb())
             .unwrap_or(surface_capabilities.formats[0]);
 
+        let (depth_texture, depth_texture_view, depth_texture_sampler) =
+            create_depth_texture(&device, window_size);
+
         let mut _self = Self {
             device,
             queue,
             surface,
             surface_capabilities,
             surface_texture_format,
+            depth_texture,
+            depth_texture_sampler,
+            depth_texture_view,
         };
 
         _self.resize(window_size);
@@ -79,6 +90,11 @@ impl<'w> GraphicsCtx<'w> {
                     desired_maximum_frame_latency: 2,
                 },
             );
+            let (depth_texture, depth_texture_view, depth_texture_sampler) =
+                create_depth_texture(&self.device, window_size);
+            self.depth_texture = depth_texture;
+            self.depth_texture_view = depth_texture_view;
+            self.depth_texture_sampler = depth_texture_sampler;
         }
     }
 
@@ -97,9 +113,13 @@ impl<'w> GraphicsCtx<'w> {
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let encoder = self
+        let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        for part in renderer.parts() {
+            part.prepare(&self, &mut encoder);
+        }
 
         Some(Frame {
             render: RenderCtx {
@@ -113,6 +133,44 @@ impl<'w> GraphicsCtx<'w> {
     }
 }
 
+pub fn create_depth_texture(
+    device: &wgpu::Device,
+    (width, height): (u32, u32),
+) -> (Texture, TextureView, Sampler) {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let desc = wgpu::TextureDescriptor {
+        label: Some("Depth texture"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Depth32Float,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    };
+    let texture = device.create_texture(&desc);
+
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        compare: Some(wgpu::CompareFunction::LessEqual),
+        lod_min_clamp: 0.0,
+        lod_max_clamp: 100.0,
+        ..Default::default()
+    });
+
+    (texture, view, sampler)
+}
+
 pub struct Frame<'a> {
     pub ctx: &'a GraphicsCtx<'a>,
     pub render: RenderCtx,
@@ -121,15 +179,45 @@ pub struct Frame<'a> {
 
 impl<'a> Frame<'a> {
     pub(crate) fn present(mut self) {
-        for part in self.renderer.parts() {
-            part.submit(&mut self.render, self.ctx);
-        }
+        self.render();
+
         self.ctx
             .queue
             .submit(std::iter::once(self.render.encoder.finish()));
         for part in self.renderer.parts() {
-            part.post_submit();
+            part.finish();
         }
         self.render.surface_texture.present();
+    }
+
+    fn render(&mut self) {
+        let mut pass = self
+            .render
+            .encoder
+            .begin_render_pass(&RenderPassDescriptor {
+                label: Some("Sprite Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.render.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(Color3::gray(0.01).into()),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.ctx.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+        for part in self.renderer.parts() {
+            part.render(&mut pass, &self.ctx);
+        }
     }
 }

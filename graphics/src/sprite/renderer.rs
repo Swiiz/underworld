@@ -22,11 +22,8 @@ pub struct SpriteInstance {
     z_index: f32,
 }
 
-pub struct SpriteRenderer {
+pub struct SpriteRendererPart {
     pipeline: RenderPipeline,
-    depth_texture: Texture,
-    depth_texture_view: TextureView,
-    depth_texture_sampler: Sampler,
     quad_vertex_buf: Buffer,
     quad_index_buf: Buffer,
     sprite_instance_buf: Buffer,
@@ -40,7 +37,7 @@ pub struct SpriteRenderer {
 
 const MAX_SPRITES: u64 = 10_000;
 
-impl SpriteRenderer {
+impl SpriteRendererPart {
     pub fn new<'a>(
         ctx: &GraphicsCtx,
         window_size: impl Into<(u32, u32)>,
@@ -49,8 +46,7 @@ impl SpriteRenderer {
         let window_size = window_size.into();
         let (sprite_pipeline, texture_bind_group_layout) =
             create_sprite_pipeline(&ctx.device, ctx.surface_texture_format);
-        let (depth_texture, depth_texture_view, depth_texture_sampler) =
-            create_depth_texture(&ctx.device, window_size);
+
         let (quad_vertex_buf, quad_index_buf) = create_quad_vertex_buf(&ctx.device);
         let sprite_instance_buf = create_sprite_instance_buf(&ctx.device);
         let sprite_staging_belt =
@@ -64,9 +60,6 @@ impl SpriteRenderer {
 
         Self {
             pipeline: sprite_pipeline,
-            depth_texture,
-            depth_texture_view,
-            depth_texture_sampler,
             quad_vertex_buf,
             quad_index_buf,
             sprite_staging_belt,
@@ -94,17 +87,12 @@ impl SpriteRenderer {
     }
 }
 
-impl RendererPart for SpriteRenderer {
-    fn resize(&mut self, ctx: &GraphicsCtx, window_size: (u32, u32)) {
+impl RendererPart for SpriteRendererPart {
+    fn resize(&mut self, _: &GraphicsCtx, window_size: (u32, u32)) {
         self.proj_matrix = compute_proj_matrix(window_size);
-        let (depth_texture, depth_texture_view, depth_texture_sampler) =
-            create_depth_texture(&ctx.device, window_size);
-        self.depth_texture = depth_texture;
-        self.depth_texture_view = depth_texture_view;
-        self.depth_texture_sampler = depth_texture_sampler;
     }
 
-    fn submit(&mut self, rctx: &mut RenderCtx, gctx: &GraphicsCtx) {
+    fn prepare(&mut self, gctx: &GraphicsCtx, encoder: &mut CommandEncoder) {
         let len = self.queue.len();
 
         let queue = std::mem::replace(&mut self.queue, Vec::with_capacity(len));
@@ -115,7 +103,7 @@ impl RendererPart for SpriteRenderer {
             {
                 let byte_size = (queue.len() * size_of::<SpriteInstance>()) as u64;
                 let mut bufmut = self.sprite_staging_belt.write_buffer(
-                    &mut rctx.encoder,
+                    encoder,
                     &self.sprite_instance_buf,
                     0,
                     NonZeroU64::new(byte_size).unwrap(),
@@ -126,41 +114,20 @@ impl RendererPart for SpriteRenderer {
         }
         self.sprite_staging_belt.finish();
 
-        let mut render_pass: RenderPass<'_> =
-            rctx.encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Sprite Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &rctx.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(Color3::gray(0.01).into()),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
+        self.z_index = 0.000001 * (MAX_SPRITES + 1) as f32;
+    }
 
+    fn render(&mut self, render_pass: &mut wgpu::RenderPass<'_>, _: &GraphicsCtx) {
         render_pass.set_pipeline(&self.pipeline);
 
         render_pass.set_vertex_buffer(0, self.quad_vertex_buf.slice(..));
         render_pass.set_vertex_buffer(1, self.sprite_instance_buf.slice(..));
         render_pass.set_bind_group(0, &self.atlas.bind_group, &[]);
         render_pass.set_index_buffer(self.quad_index_buf.slice(..), IndexFormat::Uint16);
-        render_pass.draw_indexed(0..6, 0, 0..queue.len() as u32);
-
-        self.z_index = 0.000001 * (MAX_SPRITES + 1) as f32;
+        render_pass.draw_indexed(0..6, 0, 0..self.queue.len() as u32);
     }
 
-    fn post_submit(&mut self) {
+    fn finish(&mut self) {
         self.sprite_staging_belt.recall();
     }
 }
@@ -268,6 +235,7 @@ fn create_sprite_pipeline(
                     ],
                 },
             ],
+            compilation_options: PipelineCompilationOptions::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
@@ -277,6 +245,7 @@ fn create_sprite_pipeline(
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
+            compilation_options: PipelineCompilationOptions::default(),
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -300,19 +269,21 @@ fn create_sprite_pipeline(
             alpha_to_coverage_enabled: false,
         },
         multiview: None,
+        cache: None,
     });
 
     (render_pipeline, texture_bind_group_layout)
 }
 
 fn create_quad_vertex_buf(device: &Device) -> (Buffer, Buffer) {
+    let (o, u) = (-0.001, 1.001);
     #[rustfmt::skip]
     let vertex_data: [f32; 16] = [
-//    [ x,    y,    u,    v   ]
-        0.0,  0.0,  0.0,  1.0, // bottom left
-        1.0,  0.0,  1.0,  1.0, // bottom right
-        1.0,  1.0,  1.0,  0.0, // top right
-        0.0,  1.0,  0.0,  0.0, // top left
+//    [ x,  y,  u,  v ]
+        o,  o,  o,  u, // bottom left
+        u,  o,  u,  u, // bottom right
+        u,  u,  u,  o, // top right
+        o,  u,  o,  o, // top left
     ];
 
     let index_data = &[0u16, 1, 2, 0, 2, 3];
@@ -359,44 +330,6 @@ fn create_sprite_instance_buf(device: &Device) -> Buffer {
     };
 
     device.create_buffer(&bufdesc)
-}
-
-pub fn create_depth_texture(
-    device: &wgpu::Device,
-    (width, height): (u32, u32),
-) -> (Texture, TextureView, Sampler) {
-    let size = wgpu::Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
-    };
-    let desc = wgpu::TextureDescriptor {
-        label: Some("Depth texture"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Depth32Float,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    };
-    let texture = device.create_texture(&desc);
-
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        compare: Some(wgpu::CompareFunction::LessEqual),
-        lod_min_clamp: 0.0,
-        lod_max_clamp: 100.0,
-        ..Default::default()
-    });
-
-    (texture, view, sampler)
 }
 
 fn compute_proj_matrix((w, h): (u32, u32)) -> Matrix3<f32> {

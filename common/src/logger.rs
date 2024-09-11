@@ -40,14 +40,18 @@ impl Log for Logger {
             };
 
             let mut log_origin = String::new();
-            if let Some(file) = record.file() {
-                log_origin += &format!("{file}:");
-                if let Some(line) = record.line() {
-                    log_origin += &line.to_string();
+            #[cfg(debug_assertions)]
+            {
+                if let Some(file) = record.file() {
+                    log_origin += &format!("{file}:");
+                    if let Some(line) = record.line() {
+                        log_origin += &line.to_string();
+                    }
                 }
+                log_origin += " ";
             }
 
-            println!("{} {} - {}", log_origin, level, record.args());
+            println!("{}{} - {}", log_origin, level, record.args());
         }
     }
 

@@ -16,7 +16,9 @@ use common::{
 };
 use ecs::{Entities, Entity, EntityHandle, Query};
 use graphics::{
+    color::Color3,
     sprite::{Sprite, SpriteDrawParams},
+    text::{HorizontalAlign, Layout, Section, Text, VerticalAlign},
     Graphics,
 };
 use network::NetworkClient;
@@ -85,12 +87,28 @@ impl AppLayer for GameClient {
     }
 
     fn render(&mut self, _: WindowId) {
-        let _dt = self.timer.render_dt();
+        let dt = self.timer.render_dt();
 
         self.state.update_camera_pos();
 
         self.graphics.render(|mut frame| {
             self.state.render(&mut frame, &self.assets);
+
+            frame.renderer.text.draw_section(
+                Section::default()
+                    .add_text(
+                        Text::new(&format!("FPS: {}", 1. / dt))
+                            .with_color(Color3::WHITE)
+                            .with_scale(24.),
+                    )
+                    .with_layout(
+                        Layout::default()
+                            .h_align(HorizontalAlign::Left)
+                            .v_align(VerticalAlign::Top),
+                    )
+                    .with_screen_position(Vector2::new(10.0, 10.0))
+                    .to_owned(),
+            )
         });
     }
 
