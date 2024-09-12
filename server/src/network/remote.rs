@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Instant};
+use std::time::Instant;
 
 use ecs::EntityId;
 

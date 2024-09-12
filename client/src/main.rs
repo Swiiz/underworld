@@ -19,5 +19,5 @@ fn main() {
     }
 
     common::logger::init_logger();
-    client::platform::run_app::<GameClient>(config);
+    client::core::platform::run_app::<GameClient>(config);
 }

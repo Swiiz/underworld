@@ -1,6 +1,6 @@
 use cgmath::{Matrix3, Vector2};
 
-use crate::platform::PlatformInput;
+use crate::core::platform::PlatformInput;
 
 pub struct Camera {
     pub pos: Vector2<f32>,

@@ -3,11 +3,7 @@ use std::{mem::size_of, num::NonZeroU64};
 use bytemuck::{cast_slice, Pod, Zeroable};
 use cgmath::Matrix3;
 
-use crate::{
-    color::Color3,
-    ctx::{GraphicsCtx, RenderCtx},
-    renderer::RendererPart,
-};
+use crate::{ctx::GraphicsCtx, renderer::RendererPart};
 use wgpu::{util::StagingBelt, *};
 
 use super::{build_atlas, Atlas, Sprite, SpriteDrawParams, SpriteSheetSource};
@@ -32,7 +28,6 @@ pub struct SpriteRendererPart {
     proj_matrix: Matrix3<f32>,
     atlas: Atlas,
     queue: Vec<SpriteInstance>,
-    z_index: f32,
 }
 
 const MAX_SPRITES: u64 = 10_000;
@@ -44,8 +39,11 @@ impl SpriteRendererPart {
         sprite_sheets: impl Iterator<Item = &'a SpriteSheetSource>,
     ) -> Self {
         let window_size = window_size.into();
-        let (sprite_pipeline, texture_bind_group_layout) =
-            create_sprite_pipeline(&ctx.device, ctx.surface_texture_format);
+        let (sprite_pipeline, texture_bind_group_layout) = create_sprite_pipeline(
+            &ctx.device,
+            &ctx.depth_stencil_state,
+            ctx.surface_texture_format,
+        );
 
         let (quad_vertex_buf, quad_index_buf) = create_quad_vertex_buf(&ctx.device);
         let sprite_instance_buf = create_sprite_instance_buf(&ctx.device);
@@ -67,15 +65,11 @@ impl SpriteRendererPart {
             proj_matrix,
             queue,
             atlas,
-            z_index: 0.0,
         }
     }
 
-    pub fn draw(&mut self, sprite: Sprite, mut params: SpriteDrawParams) {
+    pub fn draw(&mut self, sprite: Sprite, params: SpriteDrawParams) {
         let spritesheet = self.atlas.sheets[sprite.sheet.0];
-
-        params.depth += self.z_index;
-        self.z_index -= 0.000001;
 
         self.queue.push(SpriteInstance {
             transform: (self.proj_matrix * params.transform).into(),
@@ -113,8 +107,6 @@ impl RendererPart for SpriteRendererPart {
             }
         }
         self.sprite_staging_belt.finish();
-
-        self.z_index = 0.000001 * (MAX_SPRITES + 1) as f32;
     }
 
     fn render(&mut self, render_pass: &mut wgpu::RenderPass<'_>, _: &GraphicsCtx) {
@@ -134,6 +126,7 @@ impl RendererPart for SpriteRendererPart {
 
 fn create_sprite_pipeline(
     device: &Device,
+    depth_stencil_state: &DepthStencilState,
     surface_texture_format: TextureFormat,
 ) -> (RenderPipeline, BindGroupLayout) {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -256,13 +249,7 @@ fn create_sprite_pipeline(
             unclipped_depth: false,
             conservative: false,
         },
-        depth_stencil: Some(wgpu::DepthStencilState {
-            format: wgpu::TextureFormat::Depth32Float,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less, // 1.
-            stencil: wgpu::StencilState::default(),     // 2.
-            bias: wgpu::DepthBiasState::default(),
-        }),
+        depth_stencil: Some(depth_stencil_state.clone()),
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,
@@ -276,7 +263,7 @@ fn create_sprite_pipeline(
 }
 
 fn create_quad_vertex_buf(device: &Device) -> (Buffer, Buffer) {
-    let (o, u) = (-0.001, 1.001);
+    let (o, u) = (0., 1.);
     #[rustfmt::skip]
     let vertex_data: [f32; 16] = [
 //    [ x,  y,  u,  v ]

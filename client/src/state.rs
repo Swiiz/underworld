@@ -1,12 +1,13 @@
 use std::cell::OnceCell;
 
-use common::{core::spatial::Position, logger::debug, tilemap::TileMap};
+use common::core::spatial::Position;
 use ecs::{Entities, Entity, EntityId};
 use graphics::ctx::Frame;
 
 use crate::{
-    assets::ClientAssets, camera::Camera, network::NetworkClient, platform::PlatformInput,
-    player::PlayerController, rendering::draw_entities, tilemap::ClientTileMap,
+    core::assets::ClientAssets, core::camera::Camera, core::network::NetworkClient,
+    core::platform::PlatformInput, core::rendering::draw_entities, core::tilemap::ClientTileMap,
+    player::PlayerController,
 };
 
 pub enum ClientState {

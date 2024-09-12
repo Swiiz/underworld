@@ -12,6 +12,7 @@ pub struct GraphicsCtx<'w> {
     depth_texture: Texture,
     depth_texture_view: TextureView,
     depth_texture_sampler: Sampler,
+    pub(crate) depth_stencil_state: DepthStencilState,
 }
 
 pub struct RenderCtx {
@@ -56,7 +57,7 @@ impl<'w> GraphicsCtx<'w> {
             .find(|f| f.is_srgb())
             .unwrap_or(surface_capabilities.formats[0]);
 
-        let (depth_texture, depth_texture_view, depth_texture_sampler) =
+        let (depth_texture, depth_texture_view, depth_texture_sampler, depth_stencil_state) =
             create_depth_texture(&device, window_size);
 
         let mut _self = Self {
@@ -68,6 +69,7 @@ impl<'w> GraphicsCtx<'w> {
             depth_texture,
             depth_texture_sampler,
             depth_texture_view,
+            depth_stencil_state,
         };
 
         _self.resize(window_size);
@@ -90,7 +92,7 @@ impl<'w> GraphicsCtx<'w> {
                     desired_maximum_frame_latency: 2,
                 },
             );
-            let (depth_texture, depth_texture_view, depth_texture_sampler) =
+            let (depth_texture, depth_texture_view, depth_texture_sampler, _) =
                 create_depth_texture(&self.device, window_size);
             self.depth_texture = depth_texture;
             self.depth_texture_view = depth_texture_view;
@@ -133,10 +135,12 @@ impl<'w> GraphicsCtx<'w> {
     }
 }
 
+pub const DEPTH_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
 pub fn create_depth_texture(
     device: &wgpu::Device,
     (width, height): (u32, u32),
-) -> (Texture, TextureView, Sampler) {
+) -> (Texture, TextureView, Sampler, DepthStencilState) {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -148,11 +152,13 @@ pub fn create_depth_texture(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Depth32Float,
+        format: DEPTH_TEXTURE_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     };
     let texture = device.create_texture(&desc);
+
+    let compare = wgpu::CompareFunction::GreaterEqual;
 
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -162,13 +168,21 @@ pub fn create_depth_texture(
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
         mipmap_filter: wgpu::FilterMode::Nearest,
-        compare: Some(wgpu::CompareFunction::LessEqual),
+        compare: Some(compare),
         lod_min_clamp: 0.0,
         lod_max_clamp: 100.0,
         ..Default::default()
     });
 
-    (texture, view, sampler)
+    let depth_stencil_state = wgpu::DepthStencilState {
+        format: DEPTH_TEXTURE_FORMAT,
+        depth_write_enabled: true,
+        depth_compare: compare,
+        stencil: wgpu::StencilState::default(),
+        bias: wgpu::DepthBiasState::default(),
+    };
+
+    (texture, view, sampler, depth_stencil_state)
 }
 
 pub struct Frame<'a> {
@@ -207,7 +221,7 @@ impl<'a> Frame<'a> {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.ctx.depth_texture_view,
                     depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
+                        load: wgpu::LoadOp::Clear(0.0),
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,

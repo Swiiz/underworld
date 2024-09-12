@@ -6,7 +6,7 @@ use common::{
 };
 use graphics::sprite::{SpriteSheetHandle, SpriteSheetSource};
 
-use crate::tilemap::{load_handles, ClientTileData};
+use crate::core::tilemap::{load_handles, ClientTileData};
 
 pub type TexturesRegistry = Registry<SpriteSheetSource, SpriteSheetHandle>;
 pub type ClientTileRegistry = Registry<ClientTileData>;

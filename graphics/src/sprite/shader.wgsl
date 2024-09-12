@@ -33,7 +33,10 @@ fn vs_main(
     );
     out.tex_coords = instance.tex_pos + model.tex_coords * instance.tex_dims;
     let pos = model_matrix * vec3<f32>(model.position, 1.0);
-    out.clip_position = vec4<f32>(pos.xy, instance.z_index / 100.0, 1.0);
+
+    // i value is just above 0. to avoid empty strips between texture due to floating point precision
+    let i = 0.0001;
+    out.clip_position = vec4<f32>(pos.x + i, pos.y + i, instance.z_index * 0.01, 1.0);
     out.tint = instance.tint;
     
     return out;
@@ -57,6 +60,8 @@ fn fs_main(in: VertexOutput, ) -> FragmentOutput {
     var rgb: vec3<f32> = sample.xyz * in.tint;
     var out: FragmentOutput;
     out.rgba = vec4<f32>(rgb, sample.a);
-    out.depth = in.clip_position.z + (1.0 - sample.a);
+    if (out.rgba.a < 0.001) {
+        discard;
+    }
     return out;
 }

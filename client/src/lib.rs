@@ -1,7 +1,5 @@
 use std::{cell::OnceCell, sync::Arc, time::Instant};
 
-use assets::ClientAssets;
-use camera::Camera;
 use cgmath::{Array, Vector2, Zero};
 use common::{
     core::EntityKind,
@@ -14,6 +12,12 @@ use common::{
     },
     utils::timer::Timer,
 };
+use core::assets::ClientAssets;
+use core::camera::Camera;
+use core::network::NetworkClient;
+use core::platform::{AppLayer, PlatformHandle, PlatformInput};
+use core::rendering::RenderData;
+use core::tilemap::ClientTileMap;
 use ecs::{Entities, Entity, EntityHandle, Query};
 use graphics::{
     color::Color3,
@@ -21,22 +25,14 @@ use graphics::{
     text::{HorizontalAlign, Layout, Section, Text, VerticalAlign},
     Graphics,
 };
-use network::NetworkClient;
-use platform::{AppLayer, PlatformHandle, PlatformInput};
 use player::PlayerController;
-use rendering::RenderData;
 use state::ClientState;
-use tilemap::ClientTileMap;
 use winit::window::{Window, WindowAttributes, WindowId};
 
-pub mod assets;
-pub mod camera;
-pub mod network;
-pub mod platform;
+pub mod core;
 pub mod player;
-pub mod rendering;
 pub mod state;
-pub mod tilemap;
+pub mod ui;
 
 pub struct GameClient {
     config: GameClientConfig,
@@ -91,24 +87,13 @@ impl AppLayer for GameClient {
 
         self.state.update_camera_pos();
 
-        self.graphics.render(|mut frame| {
-            self.state.render(&mut frame, &self.assets);
+        self.graphics.render(|frame| {
+            self.state.render(frame, &self.assets);
 
-            frame.renderer.text.draw_section(
-                Section::default()
-                    .add_text(
-                        Text::new(&format!("FPS: {}", 1. / dt))
-                            .with_color(Color3::WHITE)
-                            .with_scale(24.),
-                    )
-                    .with_layout(
-                        Layout::default()
-                            .h_align(HorizontalAlign::Left)
-                            .v_align(VerticalAlign::Top),
-                    )
-                    .with_screen_position(Vector2::new(10.0, 10.0))
-                    .to_owned(),
-            )
+            ui::play_overlay(frame, &self.state, &self.assets);
+
+            #[cfg(debug_assertions)]
+            ui::debug_overlay(frame, dt);
         });
     }
 

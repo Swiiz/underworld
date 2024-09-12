@@ -1,7 +1,7 @@
 use wgpu::{CommandEncoder, RenderPass};
 
 use crate::{
-    ctx::{GraphicsCtx, RenderCtx},
+    ctx::GraphicsCtx,
     sprite::renderer::SpriteRendererPart,
     text::renderer::TextRendererPart,
 };

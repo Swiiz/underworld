@@ -9,7 +9,7 @@ use graphics::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use super::{
     assets::{ClientAssets, TexturesRegistry},
     camera::Camera,
     platform::PlatformInput,

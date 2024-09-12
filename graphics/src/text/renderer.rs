@@ -1,13 +1,10 @@
 use wgpu::*;
 use wgpu_text::{
-    glyph_brush::{ab_glyph::FontRef, OwnedSection, Section},
+    glyph_brush::{ab_glyph::FontRef, OwnedSection},
     BrushBuilder, TextBrush,
 };
 
-use crate::{
-    ctx::{GraphicsCtx, RenderCtx},
-    renderer::{Renderer, RendererPart},
-};
+use crate::{ctx::GraphicsCtx, renderer::RendererPart};
 
 pub struct TextRendererPart {
     brush: TextBrush<FontRef<'static>>,
@@ -19,13 +16,7 @@ impl TextRendererPart {
         Self {
             brush: BrushBuilder::using_font_bytes(include_bytes!("font.ttf"))
                 .expect("Failed to init font brush")
-                .with_depth_stencil(Some(DepthStencilState {
-                    format: TextureFormat::Depth32Float, // Same as in sprite renderer part
-                    bias: DepthBiasState::default(),
-                    depth_compare: CompareFunction::Less,
-                    depth_write_enabled: false,
-                    stencil: StencilState::default(),
-                }))
+                .with_depth_stencil(Some(ctx.depth_stencil_state.clone()))
                 .build(&ctx.device, width, height, ctx.surface_texture_format),
             queue: vec![],
         }

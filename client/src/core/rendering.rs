@@ -1,11 +1,13 @@
-use cgmath::{Matrix3, Vector2};
+use core::f32;
+
+use cgmath::{Array, Matrix3, Vector2};
 use ecs::{Entities, Entity, Query};
 use graphics::{
     ctx::Frame,
     sprite::{Sprite, SpriteDrawParams},
 };
 
-use crate::camera::Camera;
+use super::camera::Camera;
 
 use common::core::spatial::Position;
 
@@ -29,7 +31,7 @@ impl RenderData {
         self
     }
 
-    pub fn draw(&self, transform: Matrix3<f32>, frame: &mut Frame) {
+    pub fn draw(&self, transform: Matrix3<f32>, z: f32, frame: &mut Frame) {
         for (sprite, draw_params) in self.sprites.iter() {
             frame.renderer.sprites.draw(
                 sprite.clone(),
@@ -37,6 +39,7 @@ impl RenderData {
                     transform: transform
                         * draw_params.transform
                         * Matrix3::from_translation(-Vector2::new(0.5, 0.5)),
+                    depth: z,
                     ..draw_params.clone()
                 },
             );
@@ -53,6 +56,9 @@ pub fn draw_entities(entities: &Entities, frame: &mut Frame, camera: &Camera) {
 
         let transform = camera.view_transform() * Matrix3::from_translation(pos);
 
-        entity.get::<RenderData>().unwrap().draw(transform, frame);
+        entity
+            .get::<RenderData>()
+            .unwrap()
+            .draw(transform, 0.5 - pos.y * f32::MIN_POSITIVE, frame);
     }
 }

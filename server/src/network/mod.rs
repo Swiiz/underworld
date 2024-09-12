@@ -4,7 +4,7 @@ use std::{
     iter,
     net::{SocketAddr, TcpListener, TcpStream},
     rc::Rc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use common::{

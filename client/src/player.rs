@@ -1,4 +1,4 @@
-use crate::{network::NetworkClient, platform::PlatformInput, rendering::RenderData};
+use crate::core::{network::NetworkClient, platform::PlatformInput, rendering::RenderData};
 use cgmath::{InnerSpace, Vector2, Zero};
 use common::{
     core::spatial::Position, network::proto::play::ServerboundSetPlayerPos, utils::maths::MaybeNan,
