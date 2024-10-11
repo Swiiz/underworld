@@ -1,7 +1,7 @@
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData, path::Path};
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub struct Registry<T, I: From<usize> = RecordId> {
     _marker: PhantomData<I>,
@@ -27,6 +27,71 @@ impl<T, I: From<usize> + Into<usize> + Copy> Registry<T, I> {
             _marker: PhantomData,
             entries: IndexMap::new(),
         }
+    }
+
+    pub fn load_json_part_from_disk_mapped<Item: DeserializeOwned>(
+        path: impl AsRef<Path>,
+        part: &str,
+        map_fn: impl Fn(Item) -> T,
+    ) -> Self {
+        let raw = serde_json::from_str::<HashMap<String, HashMap<String, serde_json::Value>>>(
+            std::fs::read_to_string(path).unwrap().as_str(),
+        )
+        .expect("Failed to load registry manifest");
+        let mut entries = raw
+            .into_iter()
+            .map(|(name, parts)| {
+                let v = parts
+                    .into_iter()
+                    .find_map(|(k, v)| (k == part).then(|| v))
+                    .expect("Failed to load registry manifest selected part");
+                (
+                    name,
+                    map_fn(serde_json::from_value::<Item>(v).expect("Failed to parse common tile")),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Self {
+            _marker: PhantomData,
+            entries: IndexMap::<String, T, _>::from_iter(entries),
+        }
+    }
+
+    pub fn load_json_part_from_disk(path: impl AsRef<Path>, part: &str) -> Self
+    where
+        T: DeserializeOwned,
+    {
+        Self::load_json_part_from_disk_mapped(path, part, |v| v)
+    }
+
+    pub fn load_whole_json_from_disk_mapped<Item: DeserializeOwned>(
+        path: impl AsRef<Path>,
+        map_fn: impl Fn(Item) -> T,
+    ) -> Self {
+        let mut entries = serde_json::from_str::<HashMap<String, Item>>(
+            std::fs::read_to_string(path).unwrap().as_str(),
+        )
+        .expect("Failed to load registry manifest")
+        .into_iter()
+        .map(|(k, v)| (k, map_fn(v)))
+        .collect::<Vec<_>>();
+
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Self {
+            _marker: PhantomData,
+            entries: IndexMap::<String, T, _>::from_iter(entries),
+        }
+    }
+
+    pub fn load_whole_json_from_disk(path: impl AsRef<Path>) -> Self
+    where
+        T: DeserializeOwned,
+    {
+        Self::load_whole_json_from_disk_mapped(path, |v| v)
     }
 
     pub fn register(&mut self, label: String, tile: T) -> RecordId {

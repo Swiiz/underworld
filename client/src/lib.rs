@@ -25,14 +25,19 @@ use graphics::{
     text::{HorizontalAlign, Layout, Section, Text, VerticalAlign},
     Graphics,
 };
-use player::PlayerController;
-use state::ClientState;
-use winit::window::{Window, WindowAttributes, WindowId};
+use gui::{inventory::PlayerInventory, GuiManager};
+use player::{PlayerEntityController, PlayerInventoryController};
+use state::{ClientState, Remote};
+use winit::{
+    keyboard::KeyCode,
+    window::{Window, WindowAttributes, WindowId},
+};
 
 pub mod core;
+pub mod gui;
+pub mod overlays;
 pub mod player;
 pub mod state;
-pub mod ui;
 
 pub struct GameClient {
     config: GameClientConfig,
@@ -41,6 +46,8 @@ pub struct GameClient {
     assets: ClientAssets,
     timer: Timer,
     network: NetworkClient,
+
+    gui_manager: GuiManager,
 
     state: ClientState,
 }
@@ -69,6 +76,8 @@ impl AppLayer for GameClient {
         network.send(&ServerboundLoginStart {
             username: config.username.clone(),
         });
+        let gui_manager = GuiManager::new();
+
         let state = ClientState::Connecting;
 
         Self {
@@ -78,6 +87,7 @@ impl AppLayer for GameClient {
             assets,
             network,
             timer,
+            gui_manager,
             state,
         }
     }
@@ -85,15 +95,14 @@ impl AppLayer for GameClient {
     fn render(&mut self, _: WindowId) {
         let dt = self.timer.render_dt();
 
-        self.state.update_camera_pos();
-
         self.graphics.render(|frame| {
-            self.state.render(frame, &self.assets);
+            let draw_ig_overlay = !self.gui_manager.is_open();
 
-            ui::play_overlay(frame, &self.state, &self.assets);
+            self.state.render(frame, &self.assets, draw_ig_overlay);
+            self.gui_manager.render_if_open(frame, &self.assets);
 
             #[cfg(debug_assertions)]
-            ui::debug_overlay(frame, dt);
+            overlays::debug_overlay(frame, dt);
         });
     }
 
@@ -123,20 +132,24 @@ impl AppLayer for GameClient {
                         self.state = ClientState::Connected {
                             player_entity: OnceCell::new(),
                             camera: Camera::new(),
-                            controller: PlayerController::default(),
-                            terrain: ClientTileMap::new(terrain),
-                            entities,
+                            pe_controller: PlayerEntityController::default(),
+                            pi_controller: PlayerInventoryController::default(),
+                            remote: Remote {
+                                terrain: ClientTileMap::new(terrain),
+                                entities,
+                            },
                         };
                     }
                 }
                 ClientState::Connected {
                     player_entity,
-                    entities,
+                    remote,
                     ..
                 } => {
                     if let Some(ClientboundSpawnEntity { entity, state }) = packet.try_decode() {
-                        let mut entity =
-                            entities.load_entity::<SyncComponentSelection>(entity, state);
+                        let mut entity = remote
+                            .entities
+                            .load_entity::<SyncComponentSelection>(entity, state);
 
                         load_entity_textures(&mut entity, &self.assets);
 
@@ -145,10 +158,12 @@ impl AppLayer for GameClient {
                     } else if let Some(ClientboundSetEntityPosition { entity, pos }) =
                         packet.try_decode()
                     {
-                        let eid = entity.validate(&entities);
-                        self.state.set_entity_position(eid, pos);
+                        let eid = entity.validate(&remote.entities);
+                        remote.sync_entity_position(eid, pos);
                     } else if let Some(ClientboundRemoveEntity { entity }) = packet.try_decode() {
-                        if let Some(mut entity) = entities.edit(entity.validate(&entities)) {
+                        if let Some(mut entity) =
+                            remote.entities.edit(entity.validate(&remote.entities))
+                        {
                             entity.despawn();
                         } else {
                             warn!("Received entity despawn packet but entity was not found");
@@ -164,7 +179,14 @@ impl AppLayer for GameClient {
     }
 
     fn input(&mut self, _: WindowId, event: PlatformInput) {
-        //TODO: move state input into here
+        if let PlatformInput::Keyboard {
+            key: KeyCode::KeyE, ..
+        } = event
+        {
+            self.gui_manager.open(PlayerInventory::new());
+        }
+
+        self.gui_manager.input(&event);
         self.state.input(&event, self.window.inner_size());
     }
 

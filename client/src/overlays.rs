@@ -31,19 +31,26 @@ pub fn play_overlay(frame: &mut Frame, state: &ClientState, assets: &ClientAsset
         return;
     };
 
-    for i in 0..10 {
-        frame.renderer.sprites.draw(
-            Sprite {
-                sheet: assets.textures.get_id("actionbar"),
-                pos: Vector2::from_value(0),
-                size: Vector2::from_value(1),
-            },
-            SpriteDrawParams {
-                transform: Matrix3::from_translation(Vector2::new(-0.81 + i as f32 * 0.18, -1.))
-                    * Matrix3::from_scale(0.15)
-                    * Matrix3::from_translation(Vector2::new(-0.5, 0.)),
-                ..Default::default()
-            },
-        )
+    match state {
+        ClientState::Connected { pi_controller, .. } => {
+            for i in 0..10 {
+                frame.renderer.sprites.draw(
+                    Sprite {
+                        sheet: assets.textures.get_id("actionbar"),
+                        pos: Vector2::new((i == pi_controller.actionbar_slot).into(), 0),
+                        size: Vector2::from_value(1),
+                    },
+                    SpriteDrawParams {
+                        transform: Matrix3::from_translation(Vector2::new(
+                            -0.81 + i as f32 * 0.18,
+                            -1.,
+                        )) * Matrix3::from_scale(0.15)
+                            * Matrix3::from_translation(Vector2::new(-0.5, 0.)),
+                        ..Default::default()
+                    },
+                )
+            }
+        }
+        _ => {}
     }
 }

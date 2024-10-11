@@ -35,7 +35,7 @@ fn vs_main(
     let pos = model_matrix * vec3<f32>(model.position, 1.0);
 
     // i value is just above 0. to avoid empty strips between texture due to floating point precision
-    let i = 0.0001;
+    let i = 0.000001;
     out.clip_position = vec4<f32>(pos.x + i, pos.y + i, instance.z_index * 0.01, 1.0);
     out.tint = instance.tint;
     

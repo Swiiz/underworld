@@ -98,7 +98,7 @@ pub(super) fn build_atlas<'a>(
     let mut packer = TexturePacker::new_skyline(TexturePackerConfig {
         max_width: 4096,
         max_height: 4096,
-        texture_padding: 0,
+        texture_extrusion: 1,
         trim: false,
         allow_rotation: false,
         ..Default::default()

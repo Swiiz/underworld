@@ -52,24 +52,32 @@ impl ClientTileMap {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame, assets: &ClientAssets, camera: &Camera) {
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        assets: &ClientAssets,
+        camera: &Camera,
+        draw_overlay: bool,
+    ) {
         for (chunk_coords, chunk) in self.common.chunks.iter() {
             render_chunk(&chunk, frame, assets, &chunk_coords, camera)
         }
 
-        frame.renderer.sprites.draw(
-            Sprite {
-                sheet: assets.textures.get_id("tilemap_overlay").clone(),
-                pos: Vector2::zero(),
-                size: Vector2::new(1, 1),
-            },
-            SpriteDrawParams {
-                transform: camera.view_transform()
-                    * Matrix3::from_translation(self.selected_tile(camera).map(|i| i as f32))
-                    * Matrix3::from_translation(Vector2::from_value(-0.5)),
-                ..Default::default()
-            },
-        );
+        if draw_overlay {
+            frame.renderer.sprites.draw(
+                Sprite {
+                    sheet: assets.textures.get_id("tilemap_overlay").clone(),
+                    pos: Vector2::zero(),
+                    size: Vector2::new(1, 1),
+                },
+                SpriteDrawParams {
+                    transform: camera.view_transform()
+                        * Matrix3::from_translation(self.selected_tile(camera).map(|i| i as f32))
+                        * Matrix3::from_translation(Vector2::from_value(-0.5)),
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     pub fn input(&mut self, event: &PlatformInput, window_size: impl Into<(u32, u32)>) {

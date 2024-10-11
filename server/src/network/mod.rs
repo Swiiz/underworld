@@ -109,7 +109,7 @@ impl NetworkServer {
                     ]
                     .contains(&e.kind()) =>
                 {
-                    info!("Client {addr} deconnected because of network error: {e:?}");
+                    info!("Client {addr} disconnected because of network error: {e:?}");
                     self.disconnect(&addr);
                 }
                 Err(e) => {

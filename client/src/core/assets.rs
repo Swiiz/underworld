@@ -20,8 +20,22 @@ pub struct ClientAssets {
 impl ClientAssets {
     pub fn load() -> Self {
         let common = CommonAssets::load();
-        let textures = load_textures();
-        let tiles = load_tiles(&textures);
+        let textures_base_path = PathBuf::from("assets/textures/");
+        let textures = Registry::load_whole_json_from_disk_mapped(
+            textures_base_path.join("spritesheets.json"),
+            |mut v: SpriteSheetSource| {
+                v.path = textures_base_path
+                    .join(v.path)
+                    .to_string_lossy()
+                    .to_string();
+                v
+            },
+        );
+        let tiles = Registry::load_json_part_from_disk_mapped(
+            "assets/terrain/tiles.json",
+            "@client",
+            |v| load_handles(v, &textures),
+        );
 
         Self {
             common,
@@ -29,60 +43,4 @@ impl ClientAssets {
             tiles,
         }
     }
-}
-
-fn load_textures() -> TexturesRegistry {
-    let mut textures = TexturesRegistry::new();
-
-    let base_path = PathBuf::from("assets/textures/");
-
-    serde_json::from_str::<HashMap<String, SpriteSheetSource>>(
-        std::fs::read_to_string(base_path.join("spritesheets.json"))
-            .unwrap()
-            .as_str(),
-    )
-    .expect("Failed to load spritesheets manifest")
-    .into_iter()
-    .for_each(|(k, mut data)| {
-        data.path = base_path.join(data.path).to_string_lossy().to_string();
-        textures.register(k, data);
-    });
-
-    textures
-}
-
-pub struct SpriteAsset {}
-
-fn load_tiles(textures: &TexturesRegistry) -> ClientTileRegistry {
-    let mut tiles = Registry::new();
-
-    let base_path = PathBuf::from("assets/terrain/");
-
-    let mut entries = serde_json::from_str::<HashMap<String, HashMap<String, serde_json::Value>>>(
-        std::fs::read_to_string(base_path.join("tiles.json"))
-            .unwrap()
-            .as_str(),
-    )
-    .expect("Failed to load tiles manifest")
-    .into_iter()
-    .map(|(k, mut v)| {
-        let v = v
-            .remove("@client")
-            .expect("Failed to load common tile manifest");
-        (
-            k,
-            serde_json::from_value::<ClientTileData<StaticHandle>>(v)
-                .expect("Failed to parse common tile"),
-        )
-    })
-    .collect::<Box<_>>();
-
-    // REALY IMPORTANT TO ENSURE TILES ARE ORDERED THE SAME WAY CLIENTSIDE AND SERVERSIDE
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
-
-    for (k, v) in entries {
-        tiles.register(k, load_handles(v, textures));
-    }
-
-    tiles
 }

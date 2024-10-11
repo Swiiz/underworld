@@ -9,14 +9,18 @@
     },
     "characters": {
         "path": "characters.png",
-        "sprite_px_size": [16, 16]
+        "sprite_px_size": [32, 32]
     },
     "tilemap_overlay": {
         "path": "tilemap_overlay.png",
-        "sprite_px_size": [16, 16]  
+        "sprite_px_size": [32, 32]  
     },
     "grass": {
         "path": "grass.png",
         "sprite_px_size": [32, 32]
+    },
+    "inventory": {
+        "path": "inventory.png",
+        "sprite_px_size": [256, 256]
     }
 }

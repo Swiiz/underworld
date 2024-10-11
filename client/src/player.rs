@@ -7,7 +7,7 @@ use ecs::Entity;
 use winit::{event::ElementState, keyboard::KeyCode};
 
 /// Player controller
-pub enum PlayerController {
+pub enum PlayerEntityController {
     Moving {
         forward: bool,
         backward: bool,
@@ -16,7 +16,7 @@ pub enum PlayerController {
     },
 }
 
-impl Default for PlayerController {
+impl Default for PlayerEntityController {
     fn default() -> Self {
         Self::Moving {
             forward: false,
@@ -27,10 +27,10 @@ impl Default for PlayerController {
     }
 }
 
-impl PlayerController {
+impl PlayerEntityController {
     pub fn handle_input(&mut self, input: &PlatformInput) {
         match self {
-            PlayerController::Moving {
+            PlayerEntityController::Moving {
                 forward,
                 backward,
                 left,
@@ -52,7 +52,7 @@ impl PlayerController {
 
     pub fn move_player(&self, entity: &impl Entity, dt: f32, network: &mut NetworkClient) {
         match self {
-            PlayerController::Moving {
+            PlayerEntityController::Moving {
                 forward,
                 backward,
                 left,
@@ -64,24 +64,24 @@ impl PlayerController {
                 let mut dir = Vector2::<f32>::zero();
 
                 if *forward {
-                    *sheet_pos = Vector2::new(1, 3);
+                    *sheet_pos = Vector2::new(0, 3);
                     dir.y += 1.;
                 }
                 if *backward {
-                    *sheet_pos = Vector2::new(1, 0);
+                    *sheet_pos = Vector2::new(0, 0);
                     dir.y -= 1.;
                 }
                 if *left {
-                    *sheet_pos = Vector2::new(1, 1);
+                    *sheet_pos = Vector2::new(0, 2);
                     dir.x -= 1.;
                 }
                 if *right {
-                    *sheet_pos = Vector2::new(1, 2);
+                    *sheet_pos = Vector2::new(0, 1);
                     dir.x += 1.;
                 }
 
                 let mut pos = entity.get_mut::<Position>().unwrap();
-                let speed = 5.0;
+                let speed = 1.5;
 
                 pos.0 += (dir.normalize() * dt * speed).no_nan();
 
@@ -89,6 +89,45 @@ impl PlayerController {
                     network.send(&ServerboundSetPlayerPos { pos: *pos });
                 }
             }
+        }
+    }
+}
+
+pub struct PlayerInventoryController {
+    pub actionbar_slot: u8,
+}
+
+impl Default for PlayerInventoryController {
+    fn default() -> Self {
+        Self { actionbar_slot: 0 }
+    }
+}
+
+impl PlayerInventoryController {
+    pub fn handle_input(&mut self, input: &PlatformInput) {
+        match input {
+            &PlatformInput::Keyboard { key, state } => {
+                if state.is_pressed() {
+                    if let Some(slot) = [
+                        KeyCode::Digit1,
+                        KeyCode::Digit2,
+                        KeyCode::Digit3,
+                        KeyCode::Digit4,
+                        KeyCode::Digit5,
+                        KeyCode::Digit6,
+                        KeyCode::Digit7,
+                        KeyCode::Digit8,
+                        KeyCode::Digit9,
+                        KeyCode::Digit0,
+                    ]
+                    .iter()
+                    .position(|k| k == &key)
+                    {
+                        self.actionbar_slot = slot as u8;
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }

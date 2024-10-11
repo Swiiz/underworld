@@ -1,13 +1,16 @@
 use std::cell::OnceCell;
 
 use common::core::spatial::Position;
-use ecs::{Entities, Entity, EntityId};
+use ecs::{Entities, Entity, EntityHandle, EntityId};
 use graphics::ctx::Frame;
 
 use crate::{
-    core::assets::ClientAssets, core::camera::Camera, core::network::NetworkClient,
-    core::platform::PlatformInput, core::rendering::draw_entities, core::tilemap::ClientTileMap,
-    player::PlayerController,
+    core::{
+        assets::ClientAssets, camera::Camera, network::NetworkClient, platform::PlatformInput,
+        rendering::draw_entities, tilemap::ClientTileMap,
+    },
+    overlays,
+    player::{PlayerEntityController, PlayerInventoryController},
 };
 
 pub enum ClientState {
@@ -15,11 +18,16 @@ pub enum ClientState {
     Connected {
         player_entity: OnceCell<EntityId>,
         camera: Camera,
-        controller: PlayerController,
+        pe_controller: PlayerEntityController,
+        pi_controller: PlayerInventoryController,
 
-        terrain: ClientTileMap,
-        entities: Entities,
+        remote: Remote,
     },
+}
+
+pub struct Remote {
+    pub terrain: ClientTileMap,
+    pub entities: Entities,
 }
 
 impl ClientState {
@@ -27,9 +35,9 @@ impl ClientState {
         match self {
             ClientState::Connecting => {}
             ClientState::Connected {
-                controller,
+                pe_controller: controller,
                 player_entity,
-                entities,
+                remote: Remote { entities, .. },
                 ..
             } => {
                 if let Some(player) = entities.edit(*player_entity.get().unwrap()) {
@@ -39,32 +47,24 @@ impl ClientState {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame, assets: &ClientAssets) {
-        match self {
-            ClientState::Connecting => {}
-            ClientState::Connected {
-                camera,
-                entities,
-                terrain,
-                ..
-            } => {
-                terrain.render(frame, assets, camera);
-                draw_entities(entities, frame, camera);
-            }
-        }
-    }
-
-    pub fn update_camera_pos(&mut self) {
+    pub fn render(&mut self, frame: &mut Frame, assets: &ClientAssets, draw_overlay: bool) {
         match self {
             ClientState::Connecting => {}
             ClientState::Connected {
                 camera,
                 player_entity,
-                entities,
+                remote: Remote { entities, terrain },
                 ..
             } => {
                 if let Some(player) = entities.edit(*player_entity.get().unwrap()) {
                     camera.pos = player.get::<Position>().unwrap().0;
+                }
+
+                terrain.render(frame, assets, camera, draw_overlay);
+                draw_entities(entities, frame, camera);
+
+                if draw_overlay {
+                    overlays::play_overlay(frame, &self, assets);
                 }
             }
         }
@@ -74,26 +74,25 @@ impl ClientState {
         match self {
             ClientState::Connecting => {}
             ClientState::Connected {
-                controller,
+                pe_controller,
+                pi_controller,
                 camera,
-                terrain,
+                remote: Remote { terrain, .. },
                 ..
             } => {
-                controller.handle_input(event);
+                pe_controller.handle_input(event);
+                pi_controller.handle_input(event);
                 camera.handle_input(event);
                 terrain.input(&event, window_size);
             }
         }
     }
+}
 
-    pub fn set_entity_position(&mut self, entity: EntityId, pos: Position) {
-        match self {
-            ClientState::Connecting => {}
-            ClientState::Connected { entities, .. } => {
-                if let Some(mut e) = entities.edit(entity) {
-                    e.set(pos);
-                }
-            }
+impl Remote {
+    pub fn sync_entity_position(&mut self, entity: EntityId, pos: Position) {
+        if let Some(mut e) = self.entities.edit(entity) {
+            e.set(pos);
         }
     }
 }
